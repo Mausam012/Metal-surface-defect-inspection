@@ -69,4 +69,10 @@ Dataset source, license, and relevant research references will be documented her
 
 ## 👩‍💻 Contributors
 
-Four-member student project.
+This project is developed by a team of four students.
+
+1. Mousami Keshari
+2. koyel Sardar
+3. Sayan Mondal 
+4. Saurabh Kesharwani 
+
