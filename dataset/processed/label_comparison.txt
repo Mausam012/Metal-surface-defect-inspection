@@ -1,0 +1,17 @@
+deburring -> (missing): 43
+inclusion -> 1_chongkong: 1
+inclusion -> 2_hanfeng: 1
+inclusion -> 3_yueyawan: 1
+inclusion -> 4_shuiban: 40
+inclusion -> 5_youban: 6
+inclusion -> 6_siban: 21
+inclusion -> 7_yiwu: 329
+inclusion -> 8_yahen: 2
+rolled_pit -> 7_yiwu: 1
+rolled_pit -> 8_yahen: 59
+silk_spot -> 5_youban: 8
+silk_spot -> 6_siban: 785
+waist folding -> 10_yaozhe: 11
+waist folding -> 10_yaozhed: 131
+waist folding -> 7_yiwu: 1
+waist folding -> 9_zhehen: 4
