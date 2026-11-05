@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% block title %}Preprocessing {{ rec.id|mv_id }}{% endblock %}
+{% block crumb %}Preprocessing{% endblock %}
+{% block content %}
+{% set s = rec.preprocess_settings or defaults %}
+<div class="mv-page-head">
+  <div><h1>Image preprocessing <span class="muted mono">{{ rec.id|mv_id }}</span></h1>
+  <p>{{ rec.original_filename }}. Compare the pipeline stages side by side. Only linear intensity scaling is applied by default, so defect-like patterns are neither created nor removed.</p></div>
+  <div class="d-flex gap-2 align-items-end flex-wrap">
+    <div><label class="form-label small mb-1" for="model-select">Model</label>
+    <select id="model-select" class="form-select form-select-sm">{% for m in MODEL_NAMES %}<option {{ 'selected' if m == 'ResNet' }}>{{ m }}</option>{% endfor %}</select></div>
+    <button class="btn-mv btn" data-analyze="{{ rec.id }}">Analyze image</button>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  {% for side, default in (('L', 'original_preview'), ('R', 'processed')) %}
+  <div class="col-lg-6">
+    <div class="view-title"><h3 class="m-0">{{ 'Left view' if side == 'L' else 'Right view' }}</h3>
+      <select class="form-select form-select-sm view-select" data-target="v{{ side }}">
+        {% for key, label in (('original_preview','Original X-ray'),('gray','Grayscale'),('normalized','Normalized'),('processed','Processed')) %}
+        <option value="{{ key }}" {{ 'selected' if key == default }}>{{ label }}</option>{% endfor %}
+      </select></div>
+    <div class="mv-viewer" id="v{{ side }}">
+      <div class="stage"><img alt="X-ray view" src="{{ url_for('serve_file', insp_id=rec.id, name=default ~ '.png') }}"></div>
+      <div class="tools"><button data-zoom="in" aria-label="Zoom in">+</button><button data-zoom="out" aria-label="Zoom out">&minus;</button><button data-zoom="reset" aria-label="Reset zoom">&#8634;</button></div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+<p class="muted small">Scroll to zoom, drag to pan, double-click to reset. "Original" is a display-scaled copy for the browser; the uploaded file itself is never changed.</p>
+
+<div class="row g-3">
+  <div class="col-lg-6"><div class="mv-card">
+    <h2>Settings (saved for reproducibility)</h2>
+    <form id="prepForm" class="row g-2">
+      <div class="col-12"><label class="form-label small mb-1">Normalization</label>
+        <select name="normalization" class="form-select form-select-sm">
+          <option value="percentile" {{ 'selected' if s.normalization == 'percentile' }}>Percentile stretch (robust to hot pixels)</option>
+          <option value="minmax" {{ 'selected' if s.normalization == 'minmax' }}>Min-max stretch</option></select></div>
+      <div class="col-6"><label class="form-label small mb-1">Low percentile</label><input class="form-control form-control-sm" type="number" step="0.5" min="0" max="49" name="low_percentile" value="{{ s.low_percentile }}"></div>
+      <div class="col-6"><label class="form-label small mb-1">High percentile</label><input class="form-control form-control-sm" type="number" step="0.5" min="51" max="100" name="high_percentile" value="{{ s.high_percentile }}"></div>
+      <div class="col-6"><label class="form-label small mb-1">Resize if longest side exceeds (px)</label><input class="form-control form-control-sm" type="number" min="256" max="4096" name="max_side" value="{{ s.max_side }}"></div>
+      <div class="col-6 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="clahe" name="clahe" {{ 'checked' if s.clahe }}><label class="form-check-label small" for="clahe">CLAHE contrast (off by default)</label></div></div>
+      <div class="col-12"><p class="muted small mb-1">CLAHE enhances local contrast and can create or hide defect-like texture. Use only deliberately.</p>
+        <button class="btn-mv btn btn-sm" type="submit">Apply settings</button></div>
+    </form></div></div>
+  <div class="col-lg-6"><div class="mv-card">
+    <h2>Image information</h2>
+    <dl class="mv-kv" id="metaList">
+      <dt>Format</dt><dd>{{ rec.image_format }}</dd>
+      <dt>Original size</dt><dd id="oSize">{{ meta.original_shape[1] }} x {{ meta.original_shape[0] }} px</dd>
+      <dt>Bit depth</dt><dd id="oBits">{{ meta.bit_depth }}-bit ({{ meta.dtype }}, {{ meta.channels }} channel{{ 's' if meta.channels != 1 }})</dd>
+      <dt>Intensity range</dt><dd id="oRange">{{ meta.value_min|int }} to {{ meta.value_max|int }}</dd>
+      <dt>Processed size</dt><dd id="pSize">{{ meta.processed_shape[1] }} x {{ meta.processed_shape[0] }} px{{ ' (resized)' if meta.resized }}</dd>
+      <dt>File size</dt><dd>{{ '%.1f'|format(rec.file_size / 1024) }} KB</dd>
+    </dl></div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const ID = {{ rec.id }};
+  let v = Date.now();
+  const src = (key) => `/files/${ID}/${key}.png?v=${v}`;
+  document.querySelectorAll(".view-select").forEach((sel) =>
+    sel.addEventListener("change", () => MV.viewers[sel.dataset.target].setSrc(src(sel.value))));
+  document.getElementById("prepForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const body = Object.fromEntries(f.entries()); body.clahe = f.has("clahe");
+    try {
+      const out = await MV.api(`/api/preprocess/${ID}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      v = Date.now();
+      document.querySelectorAll(".view-select").forEach((sel) => MV.viewers[sel.dataset.target].setSrc(src(sel.value)));
+      const m = out.meta;
+      document.getElementById("pSize").textContent = `${m.processed_shape[1]} x ${m.processed_shape[0]} px${m.resized ? " (resized)" : ""}`;
+      MV.toast("Preprocessing updated and settings saved.", "success");
+    } catch (err) { MV.toast(err.message); }
+  });
+});
+</script>
+{% endblock %}

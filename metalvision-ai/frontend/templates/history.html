@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}History{% endblock %}
+{% block crumb %}Inspection history{% endblock %}
+{% block content %}
+<div class="mv-page-head"><div><h1>Inspection history</h1><p>Every upload is stored in a local SQLite database. Search by file, model or ID, and filter by status.</p></div>
+  <div class="d-flex gap-2"><button class="btn-ghost" id="seedBtn">Add demo records</button><button class="btn-ghost" id="clearDemoBtn">Remove demo records</button></div></div>
+<div class="mv-card flat">
+  <div class="mv-card-head gap-2 flex-wrap">
+    <input id="q" class="form-control form-control-sm" style="max-width:300px" type="search" placeholder="Search file, model, ID or category" aria-label="Search">
+    <select id="statusFilter" class="form-select form-select-sm" style="max-width:220px" aria-label="Filter by status">
+      <option value="">All statuses</option>{% for s in STATUSES %}<option>{{ s }}</option>{% endfor %}</select>
+    <span class="muted small ms-auto" id="count"></span>
+  </div>
+  <div class="table-scroll"><table class="mv-table">
+    <thead><tr><th>ID</th><th>Image</th><th>Date and time</th><th>Model</th><th>Status</th><th>Category</th><th>Score</th><th>Review</th><th></th></tr></thead>
+    <tbody id="rows"></tbody></table></div>
+</div>
+
+<div class="modal fade" id="delModal" tabindex="-1" aria-labelledby="delTitle" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title" id="delTitle">Delete inspection?</h5><button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+  <div class="modal-body">This permanently deletes <b id="delName"></b> with its processed images and the stored upload. This cannot be undone.</div>
+  <div class="modal-footer"><button class="btn-ghost" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger" id="delConfirm">Delete</button></div>
+</div></div></div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/history.js') }}"></script>{% endblock %}
