@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}About{% endblock %}
+{% block crumb %}About the project{% endblock %}
+{% block content %}
+<div class="mv-page-head"><div><h1>{{ project_title }}</h1><p>METALVISION AI is an academic prototype built by a four-member team. It is a working inspection pipeline with model slots; it is not a validated inspection system.</p></div></div>
+
+<div class="row g-3 about">
+  <div class="col-lg-6"><div class="mv-card h-100"><h2>Problem statement</h2>
+    <p>Voids, cracks, porosity and inclusions inside metal sheets cannot be seen from the surface. Radiographic inspection reveals them, but reading X-ray images manually is slow, tiring and varies between inspectors.</p>
+    <h2>Motivation</h2>
+    <p>Computer-assisted screening can point inspectors to suspicious regions faster and more consistently, while the final decision stays with a qualified person.</p></div></div>
+  <div class="col-lg-6"><div class="mv-card h-100"><h2>Proposed solution</h2>
+    <p>A local web application that accepts radiographs, prepares them with OpenCV, passes them to interchangeable deep-learning models, visualizes suspicious regions, keeps an inspection history, and produces a PDF report.</p>
+    <h2>Objectives</h2>
+    <ul><li>Detect and localize cracks, voids, porosity and inclusions.</li><li>Compare four architectures on identical data and metrics.</li><li>Keep real AI output clearly separate from demonstration output.</li><li>Run offline on a student laptop.</li></ul></div></div>
+
+  <div class="col-lg-6"><div class="mv-card h-100"><h2>System architecture</h2>
+    <div class="layers">
+      <div><b>Browser</b> &middot; HTML, CSS, JavaScript, Bootstrap 5, Chart.js</div>
+      <div><b>Flask</b> &middot; routes and JSON API (app.py)</div>
+      <div><b>Image pipeline</b> &middot; validation, OpenCV preprocessing, overlays</div>
+      <div class="ml"><b>Model interface</b> &middot; CNN, YOLO, U-Net, ResNet (one result schema)</div>
+      <div><b>SQLite</b> &middot; inspections &middot; <b>ReportLab</b> &middot; PDF reports</div>
+    </div></div></div>
+  <div class="col-lg-6"><div class="mv-card h-100"><h2>Technologies</h2>
+    <p class="mb-1"><b>Frontend:</b> HTML5, CSS3, JavaScript, Bootstrap 5, Chart.js</p>
+    <p class="mb-1"><b>Backend:</b> Python, Flask, SQLite</p>
+    <p class="mb-1"><b>Image processing:</b> OpenCV, NumPy, Pillow</p>
+    <p class="mb-1"><b>Machine learning:</b> PyTorch, Torchvision, scikit-learn</p>
+    <p class="mb-0"><b>Reports and plots:</b> ReportLab, Matplotlib</p></div></div>
+
+  <div class="col-12"><div class="mv-card"><h2>Four ML architectures</h2>
+    <div class="row g-3">
+      <div class="col-md-6 col-xl-3"><b>CNN</b><br><span class="muted">Learns local features with stacked convolutions. Classifies the whole image.</span></div>
+      <div class="col-md-6 col-xl-3"><b>YOLO</b><br><span class="muted">Single-pass detector that outputs bounding boxes and labels.</span></div>
+      <div class="col-md-6 col-xl-3"><b>U-Net</b><br><span class="muted">Encoder-decoder with skip connections for pixel-level masks.</span></div>
+      <div class="col-md-6 col-xl-3"><b>ResNet</b><br><span class="muted">A CNN family with skip connections, <span class="mono">y = F(x) + x</span>. Strong base for transfer learning.</span></div>
+    </div></div></div>
+
+  <div class="col-lg-4"><div class="mv-card h-100"><h2>Expected outcomes</h2>
+    <ul><li>A reproducible pipeline from raw radiograph to reviewed report.</li><li>A fair comparison of four architectures once trained.</li><li>Documentation of dataset limits.</li></ul></div></div>
+  <div class="col-lg-4"><div class="mv-card h-100"><h2>Research limitations</h2>
+    <ul><li>No trained models are included, so no performance is claimed.</li><li>Public casting and welding radiographs differ from flat sheets in geometry and appearance, so results on them do not transfer automatically.</li><li>Expert-reviewed sheet annotations are needed for any real validation.</li><li>Grad-CAM shows evidence, not defect outlines.</li></ul></div></div>
+  <div class="col-lg-4"><div class="mv-card h-100"><h2>Future scope</h2>
+    <ul><li>Collect authorized flat-sheet X-rays with expert labels.</li><li>Group-aware training and independent test sets.</li><li>Model calibration and threshold tuning.</li><li>Ensemble or comparison dashboard across all four models.</li></ul></div></div>
+</div>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block crumb %}Dashboard{% endblock %}
+{% block content %}
+<div class="mv-page-head">
+  <div>
+    <h1>Inspection dashboard</h1>
+    <p><b>{{ project_title }}.</b> Upload a radiograph, prepare it with OpenCV, run it through one of four model slots, and review the highlighted regions. Results are only real once a trained checkpoint is installed.</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn-mv btn" href="{{ url_for('upload_page') }}">Upload X-ray image</a>
+    {% if show_demo %}<a class="btn-ghost" href="{{ url_for('dashboard') }}">Hide demo data</a>
+    {% else %}<a class="btn-ghost" href="{{ url_for('dashboard', demo=1) }}">Show demo data</a>{% endif %}
+  </div>
+</div>
+
+{% if show_demo %}
+<div class="mv-banner demo"><div><strong class="t">DEMO DATA included</strong>Records tagged DEMO are sample entries without images or scores. They are not measurements and say nothing about model performance.</div></div>
+{% endif %}
+
+<div class="grid-stats mb-3">
+  <div class="stat cyan"><div class="n">{{ stats.total_inspected }}</div><div class="l">Images inspected</div></div>
+  <div class="stat ok"><div class="n">{{ stats.normal }}</div><div class="l">Normal</div></div>
+  <div class="stat bad"><div class="n">{{ stats.suspicious }}</div><div class="l">Suspicious</div></div>
+  <div class="stat warn"><div class="n">{{ stats.manual_review }}</div><div class="l">Need manual review</div></div>
+  <div class="stat"><div class="n">{{ stats.model_not_available }}</div><div class="l">Model not available</div></div>
+</div>
+<p class="muted small mb-3">
+  {{ stats.real_predictions }} of {{ stats.total_inspected }} inspections used a real trained model.
+  {% if stats.awaiting_analysis %}{{ stats.awaiting_analysis }} uploaded image(s) are waiting for analysis.{% endif %}
+  {% if not show_demo and stats.demo_records_in_db %}{{ stats.demo_records_in_db }} demo record(s) hidden.{% endif %}
+</p>
+
+{% if stats.total_uploaded == 0 %}
+<div class="mv-card empty mb-3">
+  <h2>No inspections yet</h2>
+  <p>Upload an X-ray image to create the first record, or load labelled sample records to preview the history and charts.</p>
+  <a class="btn-mv btn" href="{{ url_for('upload_page') }}">Upload an image</a>
+  <button class="btn-ghost" id="seedDemo">Load demo records</button>
+</div>
+{% endif %}
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-5"><div class="mv-card h-100"><h2>Status distribution</h2><div style="height:240px"><canvas id="statusChart" data-demo="{{ 1 if show_demo else 0 }}"></canvas></div></div></div>
+  <div class="col-lg-7"><div class="mv-card h-100"><h2>Images uploaded per day</h2><div style="height:240px"><canvas id="dayChart"></canvas></div></div></div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-xl-8">
+    <div class="mv-card flat">
+      <div class="mv-card-head"><h2>Recent inspections</h2><a href="{{ url_for('history_page') }}">View all</a></div>
+      <div class="table-scroll"><table class="mv-table">
+        <thead><tr><th>ID</th><th>File</th><th>Model</th><th>Status</th><th>Mode</th></tr></thead>
+        <tbody>
+        {% for r in recent %}
+          <tr><td><a href="{{ url_for('results_page', insp_id=r.id) }}">{{ r.id|mv_id }}</a></td>
+              <td>{{ r.original_filename }}{% if r.is_demo_data %}<span class="badge-demo">DEMO</span>{% endif %}</td>
+              <td>{{ r.model_used or '—' }}</td>
+              <td><span class="badge-s s-{{ r.status|replace(' ', '-') }}">{{ r.status }}</span></td>
+              <td>{{ 'Demo record' if r.is_demo_data else ('Real inference' if r.is_real_prediction else ('Demonstration' if r.mode else '—')) }}</td></tr>
+        {% else %}<tr><td colspan="5" class="empty">Nothing here yet.</td></tr>{% endfor %}
+        </tbody></table></div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="mv-card h-100">
+      <h2>Model integration</h2>
+      {% for m in models %}
+      <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+        <span><b>{{ m.name }}</b><br><span class="muted small">{{ m.output_type }}</span></span>
+        <span class="badge-s s-{{ m.status.state|replace(' ', '-') }}">{{ m.status.state }}</span>
+      </div>
+      {% endfor %}
+      <a class="d-block mt-3" href="{{ url_for('models_page') }}">Compare models</a>
+    </div>
+  </div>
+</div>
+
+<div class="mv-card">
+  <h2>Inspection workflow</h2>
+  <div class="flow">
+    <div class="step"><span class="no">1</span><b>Upload</b><span>PNG, JPG or TIFF radiograph, checked on arrival</span></div>
+    <div class="step"><span class="no">2</span><b>Preprocess</b><span>Original bit depth kept, linear normalization only</span></div>
+    <div class="step"><span class="no">3</span><b>Inspect</b><span>One of four model slots, or labelled demonstration</span></div>
+    <div class="step"><span class="no">4</span><b>Review</b><span>A person confirms or rejects every flagged region</span></div>
+    <div class="step"><span class="no">5</span><b>Report</b><span>PDF with real vs. demo mode stated</span></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const s = document.createElement("script"); s.src = window.MV_CHART_SRC;
+  s.onload = () => { const c = document.createElement("script"); c.src = "{{ url_for('static', filename='js/charts.js') }}"; document.body.appendChild(c); };
+  s.onerror = () => document.querySelectorAll("canvas").forEach(cv => cv.parentElement.innerHTML = '<div class="empty">Charts need Chart.js. Run scripts/download_vendor.py or connect to the internet.</div>');
+  document.body.appendChild(s);
+</script>
+{% endblock %}
