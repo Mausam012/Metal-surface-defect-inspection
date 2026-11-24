@@ -36,3 +36,5 @@ dataset/cnn_crops/
 # Keep trained CNN model out of general ignore
 # Model will be selectively added when needed
 Thumbs.db
+
+!yolo_part/models/*.pt

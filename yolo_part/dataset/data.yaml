@@ -1,0 +1,17 @@
+path: C:/Users/sm423/Desktop/codding/Python/Metal-surface-defect-inspection/dataset/yolo_dataset
+train: images/train
+val: images/val
+nc: 12
+names:
+  0: '10_yaozhe'
+  1: '10_yaozhed'
+  2: '1_chongkong'
+  3: '2_hanfeng'
+  4: '3_yueyawan'
+  5: '4_shuiban'
+  6: '5_youban'
+  7: '6_siban'
+  8: '7_yiwu'
+  9: '8_yahen'
+  10: '9_zhehen'
+  11: 'deburring'
