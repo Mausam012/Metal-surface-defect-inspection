@@ -1,0 +1,45 @@
+{
+  "source": "ResNet_Handoff/reports/resnet_original_test_evaluation_20261124.json",
+  "evaluated_on": "test",
+  "n_images": 202,
+  "unit": "defect crops",
+  "summary": {
+    "Accuracy": 0.955446,
+    "Macro-F1": 0.860644
+  },
+  "macro_f1": 0.860644,
+  "per_class": {
+    "silk_spot": {
+      "precision": 0.9829,
+      "recall": 0.9746,
+      "f1-score": 0.9787,
+      "support": 118
+    },
+    "inclusion": {
+      "precision": 0.9592,
+      "recall": 0.94,
+      "f1-score": 0.9495,
+      "support": 50
+    },
+    "waist_folding": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 21
+    },
+    "rolled_pit": {
+      "precision": 0.7778,
+      "recall": 1.0,
+      "f1-score": 0.875,
+      "support": 7
+    },
+    "water_spot": {
+      "precision": 0.5,
+      "recall": 0.5,
+      "f1-score": 0.5,
+      "support": 6
+    }
+  },
+  "inference_ms_per_image": 58.02,
+  "caveat": "water_spot has only 6 test crops."
+}

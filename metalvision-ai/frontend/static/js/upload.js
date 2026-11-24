@@ -25,7 +25,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let dragging = false;
   let dragStart = null;
 
-  const isResNet = () => modelSelect.value === "ResNet";
+  // ResNet and CNN classify a region; alone they need one drawn by the user.
+  const needsCrop = () => ["ResNet", "CNN"].includes(modelSelect.value);
 
   const showError = (message) => {
     err.textContent = message;
@@ -57,20 +58,28 @@ document.addEventListener("DOMContentLoaded", () => {
     const hasCrop = Boolean(crop);
 
     analyzeBtn.disabled =
-      !hasFile || (isResNet() && !hasCrop);
+      !hasFile || (needsCrop() && !hasCrop);
 
     prepOnlyBtn.disabled = !hasFile;
   }
 
   function updateCropInterface() {
-    const active = isResNet();
+    const required = needsCrop();
 
-    cropInstructions.style.display = active ? "block" : "none";
-    cropPanel.style.display = active && image ? "block" : "none";
+    $("cropTitle").textContent = required
+      ? `${modelSelect.value} needs a defect region`
+      : "Optional: mark a region yourself";
+    $("cropText").textContent = required
+      ? `${modelSelect.value} classifies the region you draw; it does not search the whole image. ` +
+        "Choose Full Inspection to let YOLO find regions automatically."
+      : "YOLO finds defect regions automatically. Draw a box only if you want a specific area classified as well.";
+    cropInstructions.className = "mv-banner mt-3 " + (required ? "warn" : "info");
+    cropInstructions.style.display = "block";
+    cropPanel.style.display = image ? "block" : "none";
 
-    if (active && file && !image) {
+    if (file && !image) {
       $("cropStatus").textContent =
-        "ResNet crop selection requires a PNG or JPEG image.";
+        "Region selection requires a PNG or JPEG image.";
     }
 
     setButtons();
@@ -238,8 +247,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const model = modelSelect.value;
 
-    if (analyze && model === "ResNet" && !crop) {
-      showError("Please select a suspected defect region before running ResNet.");
+    if (analyze && needsCrop() && !crop) {
+      showError(`Please draw a defect region before running ${model}.`);
       return;
     }
 
@@ -249,14 +258,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (analyze) {
       fd.append("analyze_with", model);
 
-      if (model === "ResNet") {
-        fd.append("resnet_crop", JSON.stringify(crop));
+      if (crop) {
+        fd.append("manual_crop", JSON.stringify(crop));
       }
     }
 
     analyzeBtn.disabled = true;
     prepOnlyBtn.disabled = true;
-    analyzeBtn.textContent = "Working...";
+    analyzeBtn.textContent = analyze ? "Running models..." : "Working...";
 
     try {
       const out = await MV.api("/api/upload", {
@@ -313,7 +322,7 @@ document.addEventListener("DOMContentLoaded", () => {
   modelSelect.addEventListener("change", updateCropInterface);
 
   canvas.addEventListener("pointerdown", (event) => {
-    if (!image || !isResNet()) return;
+    if (!image) return;
 
     event.preventDefault();
     dragging = true;

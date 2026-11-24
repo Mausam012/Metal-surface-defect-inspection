@@ -5,7 +5,7 @@
 <div class="mv-page-head">
   <div>
     <h1>Inspection dashboard</h1>
-    <p><b>{{ project_title }}.</b> Upload a radiograph, prepare it with OpenCV, run it through one of four model slots, and review the highlighted regions. Results are only real once a trained checkpoint is installed.</p>
+    <p><b>{{ project_title }}.</b> Upload an image and run a Full Inspection: YOLO locates defects, ResNet-50 and the CNN classify every region, and U-Net maps suspicious pixels. Review the flagged regions and export a PDF report.</p>
   </div>
   <div class="d-flex gap-2 flex-wrap">
     <a class="btn-mv btn" href="{{ url_for('upload_page') }}">Upload X-ray image</a>
@@ -81,7 +81,7 @@
   <div class="flow">
     <div class="step"><span class="no">1</span><b>Upload</b><span>PNG, JPG or TIFF radiograph, checked on arrival</span></div>
     <div class="step"><span class="no">2</span><b>Preprocess</b><span>Original bit depth kept, linear normalization only</span></div>
-    <div class="step"><span class="no">3</span><b>Inspect</b><span>One of four model slots, or labelled demonstration</span></div>
+    <div class="step"><span class="no">3</span><b>Inspect</b><span>YOLO finds regions, ResNet-50 + CNN classify them, U-Net maps pixels</span></div>
     <div class="step"><span class="no">4</span><b>Review</b><span>A person confirms or rejects every flagged region</span></div>
     <div class="step"><span class="no">5</span><b>Report</b><span>PDF with real vs. demo mode stated</span></div>
   </div>

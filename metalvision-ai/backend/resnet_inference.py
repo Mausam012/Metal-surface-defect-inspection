@@ -157,13 +157,13 @@ class ResNetModel(BaseModel):
         "Uses ImageNet transfer learning and a fine-tuned classification head "
         "to identify five types of metal surface defects."
     )
-    purpose = "Five-class classification of RGB metal defect crops."
+    purpose = "Defect-type classification of each detected or selected region."
     expected_output = (
         "Predicted defect class, confidence, and probabilities "
         "for all five defect classes."
     )
-    output_type = "Five-class image classification"
-    checkpoint_hint = "models/resnet/resnet50_best.pth"
+    output_type = "Region classification"
+    checkpoint_hint = "models/resnet/resnet50_best.pth  (falls back to ResNet_Handoff/models/resnet/)"
     extras = [
         "Architecture: ResNet-50",
         "Transfer learning from ImageNet",
@@ -269,10 +269,6 @@ class ResNetModel(BaseModel):
             "version": f"{arch} / {checkpoint_path.name}"
         }
 
-        print("ResNet checkpoint loaded successfully.")
-        print("Architecture:", arch)
-        print("Classes:", names)
-        print("Input size:", self.meta["img_size"])
 
     
     def predict_crop(self, bgr_crop):

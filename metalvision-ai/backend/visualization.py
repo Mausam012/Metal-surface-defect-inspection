@@ -38,18 +38,24 @@ def _banner(img):
                 scale, (0, 215, 255), 2, cv2.LINE_AA)
 
 
-def render_overlays(gray8: np.ndarray, result: dict, out_dir, simulated=False) -> dict:
-    """Write overlay_<kind>.png files and return {kind: filename} for the kinds available."""
+def render_overlays(image: np.ndarray, result: dict, out_dir, simulated=False) -> dict:
+    """Write overlay_<kind>.png files and return {kind: filename} for the kinds available.
+
+    `image` is the canvas: a 2-D gray image or an 8-bit BGR image. Box and mask
+    coordinates in `result` must be in that image's pixel space.
+    """
     out_dir = Path(out_dir)
     for old in out_dir.glob("overlay_*.png"):
         old.unlink()
-    h, w = gray8.shape
-    base = cv2.cvtColor(gray8, cv2.COLOR_GRAY2BGR)
+    base = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR) if image.ndim == 2 else image.copy()
+    h, w = base.shape[:2]
     if simulated:
         boxes, heat, mask = demo_geometry(w, h)
     else:
         boxes, heat, mask = result.get("bounding_boxes") or [], result.get("heatmap"), result.get("segmentation_mask")
 
+    thick = max(2, round(max(h, w) / 500))
+    font = max(0.5, max(h, w) / 1600)
     produced = {}
 
     def save(kind, img):
@@ -63,10 +69,16 @@ def render_overlays(gray8: np.ndarray, result: dict, out_dir, simulated=False) -
         save("heatmap", cv2.addWeighted(base, 0.55, color, 0.45, 0))
     if boxes:
         img = base.copy()
+        colour = lambda b: (0, 165, 255) if b.get("manual") else (214, 195, 25)   # orange = manual, cyan = YOLO
         for b in boxes:
-            cv2.rectangle(img, (b["x"], b["y"]), (b["x"] + b["w"], b["y"] + b["h"]), (214, 195, 25), 2)
+            cv2.rectangle(img, (b["x"], b["y"]), (b["x"] + b["w"], b["y"] + b["h"]), colour(b), thick)
+        for b in reversed(boxes):            # labels after all boxes; region #1 drawn last = on top
+            col = colour(b)
             label = b["label"] if b.get("confidence") is None else f'{b["label"]} {b["confidence"]:.2f}'
-            cv2.putText(img, label, (b["x"], max(12, b["y"] - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (214, 195, 25), 1, cv2.LINE_AA)
+            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font, max(1, thick - 1))
+            ty = b["y"] - 6 if b["y"] - th - 10 > 0 else b["y"] + b["h"] + th + 6
+            cv2.rectangle(img, (b["x"], ty - th - 4), (b["x"] + tw + 4, ty + 4), (0, 0, 0), -1)
+            cv2.putText(img, label, (b["x"] + 2, ty), cv2.FONT_HERSHEY_SIMPLEX, font, col, max(1, thick - 1), cv2.LINE_AA)
         save("boxes", img)
     if mask is not None:
         img = base.copy()
@@ -74,5 +86,7 @@ def render_overlays(gray8: np.ndarray, result: dict, out_dir, simulated=False) -
         red[:, :] = (60, 60, 230)
         m = mask.astype(bool)
         img[m] = cv2.addWeighted(base, 0.5, red, 0.5, 0)[m]
+        contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(img, contours, -1, (40, 40, 255), thick)
         save("mask", img)
     return produced

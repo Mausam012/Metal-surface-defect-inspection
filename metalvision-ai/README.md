@@ -141,9 +141,35 @@ Offline demo (no internet in the lab)? Run once while online: `python scripts/do
 ## 8. Run the application
 
 ```bash
-python app.py            # http://127.0.0.1:5000
-python tests/test_smoke.py   # optional: checks the whole demo flow
+python app.py                 # http://127.0.0.1:5000
+python -m pytest -q tests     # smoke tests + loads the real checkpoints if present
 ```
+
+### Full Inspection (all four models together)
+
+Choose **Full Inspection** on the Upload page (the default). The pipeline is in `backend/pipeline.py`:
+
+1. **YOLO** finds defect regions in the original image (up to 10, highest confidence first).
+2. **ResNet-50** and the **CNN** classify every region; a box you draw yourself is classified too.
+3. Each region gets a **consensus** label (majority vote) and an agreement count such as `3/3`.
+4. **U-Net** produces a pixel mask over the whole image.
+5. The results page shows the regions table, a status card per model, box and mask overlays, and the PDF report contains the same.
+
+Models receive the original upload, the same kind of image they were trained on; the OpenCV preprocessing views are for inspection only.
+You can also run any single model. ResNet or CNN on their own need a region drawn on the upload page.
+
+### Where the checkpoints come from
+
+`models/<name>/` is searched first; if empty, the app uses the files already in the repository (`config.CHECKPOINT_FALLBACKS`):
+
+| Model | Checkpoint used |
+|---|---|
+| CNN | `../models/cnn_four_class.pth` |
+| ResNet-50 | `ResNet_Handoff/models/resnet/resnet50_best.pth` |
+| YOLO | `../yolo_part/models/balanced_v3_best.pt` |
+| U-Net | **not in the repo**: copy `best_unet_opencv_improved.pth` from the team Google Drive into `models/unet/` |
+
+Evaluation numbers on the Models page come from `models/<name>/metrics.json`, copied from each member's own evaluation run (source noted in each file).
 
 ## 9. How to upload an X-ray image
 

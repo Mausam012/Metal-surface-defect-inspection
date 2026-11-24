@@ -66,8 +66,9 @@ class BaseModel:
     extras: list = []
     weight_exts = (".pt", ".pth")
 
-    def __init__(self, models_dir):
+    def __init__(self, models_dir, fallbacks=()):
         self.model_dir = Path(models_dir) / self.dir_name
+        self.fallbacks = [Path(p) for p in fallbacks]   # checkpoints elsewhere in the repo
         self._model = None
         self.meta: dict = {}
         self._sig = None
@@ -75,10 +76,12 @@ class BaseModel:
 
     # ---------- checkpoint handling ----------
     def find_checkpoint(self):
-        if not self.model_dir.exists():
-            return None
-        files = [p for p in self.model_dir.iterdir() if p.suffix.lower() in self.weight_exts]
-        return max(files, key=lambda p: p.stat().st_mtime) if files else None
+        """Newest weight file in models/<dir>/, otherwise the first existing fallback."""
+        if self.model_dir.exists():
+            files = [p for p in self.model_dir.iterdir() if p.suffix.lower() in self.weight_exts]
+            if files:
+                return max(files, key=lambda p: p.stat().st_mtime)
+        return next((p for p in self.fallbacks if p.is_file()), None)
 
     def load(self, checkpoint_path: Path):  # pragma: no cover - implemented by subclasses
         raise ModelNotAvailable("This architecture has no loader yet.")

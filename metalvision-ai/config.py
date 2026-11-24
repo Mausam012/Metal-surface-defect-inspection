@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
+REPO_DIR = BASE_DIR.parent          # Metal-surface-defect-inspection/ (team repository root)
 
 APP_NAME = "METALVISION AI"
 APP_TAGLINE = "Intelligent X-Ray Based Metal Inspection System"
@@ -29,3 +30,13 @@ class Config:
     REPORT_DIR = BASE_DIR / "reports"
     MODELS_DIR = BASE_DIR / "models"
     DB_PATH = BASE_DIR / "database" / "inspection.db"
+
+    # Where the team's trained checkpoints already live in the repository.
+    # models/<name>/ is always searched first; these are used only if it is empty,
+    # so nobody has to copy 100 MB files around to run the app.
+    CHECKPOINT_FALLBACKS = {
+        "cnn": [REPO_DIR / "models" / "cnn_four_class.pth"],
+        "resnet": [BASE_DIR / "ResNet_Handoff" / "models" / "resnet" / "resnet50_best.pth"],
+        "yolo": [REPO_DIR / "yolo_part" / "models" / "balanced_v3_best.pt"],
+        "unet": [],   # U-Net checkpoint was saved to Google Drive; place it in models/unet/
+    }

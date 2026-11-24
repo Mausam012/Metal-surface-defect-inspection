@@ -32,7 +32,7 @@
           <label class="form-label small mb-1" for="model-select">Model</label>
           <select id="model-select" class="form-select form-select-sm">
             {% for m in MODEL_NAMES %}
-              <option {{ 'selected' if m == 'ResNet' }}>{{ m }}</option>
+              <option value="{{ m }}" {{ 'selected' if m == PIPELINE_NAME }}>{{ m ~ ' (YOLO + ResNet + CNN + U-Net)' if m == PIPELINE_NAME else m }}</option>
             {% endfor %}
           </select>
         </div>
@@ -42,9 +42,8 @@
 
       <div id="cropInstructions" class="mv-banner info mt-3" style="display:none">
         <div>
-          <strong class="t">ResNet requires a defect crop</strong>
-          Select the suspected defect region in the image preview before analysis.
-          ResNet classifies the selected region; it does not detect defects in the complete X-ray.
+          <strong class="t" id="cropTitle">Optional: mark a region yourself</strong>
+          <span id="cropText"></span>
         </div>
       </div>
     </div>
@@ -65,7 +64,7 @@
       </dl>
 
       <div id="cropPanel" class="mt-3" style="display:none">
-        <h3 class="h6">Select suspected defect region</h3>
+        <h3 class="h6">Defect region</h3>
         <p class="muted small">
           Drag your mouse over the image to draw a rectangle around the defect.
         </p>

@@ -11,8 +11,10 @@ _ALIASES = {"unet": "U-Net", "u_net": "U-Net", "u-net": "U-Net", "cnn": "CNN", "
 
 
 class ModelManager:
-    def __init__(self, models_dir):
-        self._models = OrderedDict((cls.name, cls(models_dir)) for cls in _CLASSES)
+    def __init__(self, models_dir, fallbacks=None):
+        fallbacks = fallbacks or {}
+        self._models = OrderedDict((cls.name, cls(models_dir, fallbacks.get(cls.dir_name, ())))
+                                   for cls in _CLASSES)
 
     def names(self):
         return list(self._models)

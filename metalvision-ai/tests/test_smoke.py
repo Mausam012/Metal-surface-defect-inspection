@@ -14,7 +14,8 @@ from app import create_app  # noqa: E402
 def make_client():
     tmp = Path(tempfile.mkdtemp())
     app = create_app({"TESTING": True, "UPLOAD_DIR": tmp / "up", "PROCESSED_DIR": tmp / "proc", "REPORT_DIR": tmp / "rep",
-                      "DB_PATH": tmp / "db" / "t.db", "MODELS_DIR": tmp / "models"})
+                      "DB_PATH": tmp / "db" / "t.db", "MODELS_DIR": tmp / "models",
+                      "CHECKPOINT_FALLBACKS": {}})           # no checkpoints -> demonstration mode
     return app.test_client()
 
 
@@ -28,7 +29,14 @@ def test_full_flow():
     for page in ("/", "/upload", "/models", "/history", "/about"):
         assert c.get(page).status_code == 200, page
 
-    r = c.post("/api/upload", data={"image": (io.BytesIO(png_bytes(np.uint16)), "sheet 1.png"), "analyze_with": "ResNet"})
+    # ResNet / CNN alone need a region; Full Inspection does not
+    r = c.post("/api/upload", data={"image": (io.BytesIO(png_bytes()), "x.png"), "analyze_with": "ResNet"})
+    assert r.status_code == 400 and "region" in r.get_json()["error"]
+    r = c.post("/api/upload", data={"image": (io.BytesIO(png_bytes()), "x.png"), "analyze_with": "CNN",
+                                    "manual_crop": '{"x": 290, "y": 0, "width": 50, "height": 50}'})
+    assert r.status_code == 400                                       # region outside the image
+
+    r = c.post("/api/upload", data={"image": (io.BytesIO(png_bytes(np.uint16)), "sheet 1.png"), "analyze_with": "Full Inspection"})
     assert r.status_code == 200, r.get_json()
     out = r.get_json()
     iid = out["id"]
@@ -39,6 +47,7 @@ def test_full_flow():
     assert rec["score"] is None and rec["bit_depth"] == 16
     assert "stored_filename" not in rec                              # internal names not exposed
 
+    assert set(rec["result_json"]["models"]) == {"YOLO", "ResNet", "CNN", "U-Net"}
     for name in ("original_preview.png", "gray.png", "normalized.png", "processed.png", "overlay_heatmap.png", "overlay_boxes.png", "overlay_mask.png"):
         assert c.get(f"/files/{iid}/{name}").status_code == 200, name
     assert c.get(f"/files/{iid}/../../app.py").status_code == 404
@@ -82,32 +91,89 @@ def test_demo_records():
 
 
 def test_real_prediction_path():
-    """A fake model proves that real results are stored/labelled as real and never as demonstration."""
+    """Fake models prove the pipeline wiring: YOLO regions -> classifiers -> consensus, stored as real output."""
     from backend.base_model import BaseModel
 
-    class Fake(BaseModel):
-        name, dir_name = "ResNet", "resnet"
+    class Ready(BaseModel):
         def find_checkpoint(self): return Path("fake.pt")
         def ensure_loaded(self): pass
-        def _predict(self, gray8):
-            h, w = gray8.shape
-            return {"status": "Suspicious", "defect_category": "porosity", "score": 0.9, "confidence": 0.9,
-                    "heatmap": np.ones((h, w), np.float32) * 0.5, "segmentation_mask": np.ones((h, w), np.uint8),
-                    "bounding_boxes": [{"x": 5, "y": 5, "w": 20, "h": 20, "label": "porosity", "confidence": 0.9}]}
+
+    class FakeYOLO(Ready):
+        name, dir_name = "YOLO", "yolo"
+        def detect(self, bgr):
+            return [{"x": 5, "y": 5, "w": 40, "h": 30, "label": "inclusion", "raw_label": "7_yiwu", "confidence": 0.9},
+                    {"x": 100, "y": 50, "w": 30, "h": 30, "label": "silk_spot", "raw_label": "6_siban", "confidence": 0.3}]
+
+    class FakeClf(Ready):
+        def predict_crop(self, crop):
+            assert crop.ndim == 3 and crop.shape[2] == 3 and crop.size
+            return {"predicted_class": "inclusion", "confidence": 0.8, "class_probabilities": {"inclusion": 0.8}}
+
+    class FakeResNet(FakeClf):
+        name, dir_name = "ResNet", "resnet"
+
+    class FakeCNN(FakeClf):
+        name, dir_name = "CNN", "cnn"
+
+    class FakeUNet(Ready):
+        name, dir_name = "U-Net", "unet"
+        def segment(self, bgr):
+            h, w = bgr.shape[:2]
+            mask = np.zeros((h, w), np.uint8)
+            mask[5:35, 5:45] = 1
+            return mask.astype(np.float32), mask
 
     tmp = Path(tempfile.mkdtemp())
     app = create_app({"TESTING": True, "UPLOAD_DIR": tmp / "u", "PROCESSED_DIR": tmp / "p", "REPORT_DIR": tmp / "r",
-                      "DB_PATH": tmp / "d" / "t.db", "MODELS_DIR": tmp / "m"})
+                      "DB_PATH": tmp / "d" / "t.db", "MODELS_DIR": tmp / "m", "CHECKPOINT_FALLBACKS": {}})
     c = app.test_client()
     mgr = app.extensions["mv_manager"]
-    mgr._models["ResNet"] = Fake(tmp / "m")
-    out = c.post("/api/upload", data={"image": (io.BytesIO(png_bytes()), "a.png"), "analyze_with": "ResNet"}).get_json()
+    for fake in (FakeYOLO, FakeResNet, FakeCNN, FakeUNet):
+        mgr._models[fake.name] = fake(tmp / "m")
+
+    out = c.post("/api/upload", data={"image": (io.BytesIO(png_bytes()), "a.png"), "analyze_with": "Full Inspection",
+                                      "manual_crop": '{"x": 200, "y": 100, "width": 50, "height": 40}'}).get_json()
     rec = c.get(f"/api/inspections/{out['id']}").get_json()
+    res = rec["result_json"]
     assert rec["is_real_prediction"] == 1 and rec["mode"] == "real" and rec["status"] == "Suspicious"
-    assert rec["score"] == 0.9 and rec["inference_time_ms"] is not None
-    assert set(rec["overlays"]) == {"heatmap", "boxes", "mask"}
-    assert b"DEMONSTRATION" not in c.get(out["redirect"]).data
+    assert rec["defect_category"] == "inclusion" and rec["score"] == 0.9
+    assert all(m["state"] == "ran" for m in res["models"].values())
+    assert [r["source"] for r in res["regions"]] == ["Manual selection", "YOLO", "YOLO"]
+    assert res["regions"][1]["agreement"] == "3/3" and res["regions"][2]["agreement"] == "2/3"
+    assert set(rec["overlays"]) == {"boxes", "mask"}
+    page = c.get(out["redirect"]).data
+    assert b"Detected regions" in page and b"3/3 models agree" in page and b"DEMONSTRATION" not in page
     assert c.get(f"/report/{out['id']}.pdf").status_code == 200
+
+    # rerun with one classifier: the saved manual region is reused
+    assert c.post(f"/api/analyze/{out['id']}", json={"model": "CNN"}).status_code == 200
+    rec = c.get(f"/api/inspections/{out['id']}").get_json()
+    assert rec["model_used"] == "CNN" and rec["status"] == "Requires Manual Review" and len(rec["result_json"]["regions"]) == 1
+
+
+def test_real_checkpoints():
+    """Loads the team's real checkpoints when they are present in the repository (skipped otherwise)."""
+    import pytest
+    import config
+    from backend.model_manager import ModelManager
+    pytest.importorskip("torch")
+    mgr = ModelManager(config.Config.MODELS_DIR, config.Config.CHECKPOINT_FALLBACKS)
+    present = [m for m in mgr.names() if mgr.get(m).find_checkpoint() is not None]
+    if not present:
+        pytest.skip("no checkpoints in this checkout")
+    rng = np.random.default_rng(0)
+    crop = (rng.random((80, 120, 3)) * 255).astype(np.uint8)
+    for name in present:
+        model = mgr.get(name)
+        model.ensure_loaded()
+        if name in ("ResNet", "CNN"):
+            p = model.predict_crop(crop)
+            assert abs(sum(p["class_probabilities"].values()) - 1) < 1e-4
+        elif name == "YOLO":
+            assert isinstance(model.detect(crop), list)
+        else:
+            prob, mask = model.segment(crop)
+            assert mask.shape == crop.shape[:2]
 
 
 if __name__ == "__main__":

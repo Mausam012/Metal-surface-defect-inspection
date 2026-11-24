@@ -49,11 +49,15 @@ class CNNModel(BaseModel):
     name = "CNN"
     dir_name = "cnn"
     architecture = "Convolutional Neural Network"
-    description = "Four-class CNN trained to classify metal surface defects."
-    purpose = "Image-level defect classification."
-    expected_output = "One of four trained defect classes."
-    output_type = "Image classification"
-    checkpoint_hint = "models/cnn/cnn_four_class.pth"
+    description = ("Custom 4-layer CNN (Conv-BN-ReLU-Pool blocks, global average pooling, dropout) "
+                   "trained from scratch on 128x128 defect crops.")
+    purpose = "Defect-type classification of each detected or selected region."
+    expected_output = "One of four defect classes with softmax probabilities."
+    output_type = "Region classification"
+    checkpoint_hint = "models/cnn/cnn_four_class.pth  (falls back to ../models/cnn_four_class.pth)"
+    extras = ["Classes: silk_spot, inclusion, waist_folding, rolled_pit",
+              "Input: RGB defect crop resized to 128 x 128",
+              "No 'normal' class: it always names a defect type"]
 
     def load(self, checkpoint_path):
         torch = require_torch()
@@ -82,6 +86,37 @@ class CNNModel(BaseModel):
             "mean": [0.5, 0.5, 0.5],
             "std": [0.5, 0.5, 0.5],
             "version": f"trained_cnn / {checkpoint_path.name}",
+        }
+
+    def predict_crop(self, bgr_crop):
+        """Classify one defect crop exactly like src/train_cnn.py evaluated it.
+
+        Training used PIL RGB -> Resize((128, 128)) -> ToTensor -> Normalize(0.5, 0.5).
+        """
+        torch = require_torch()
+        from PIL import Image
+        from torchvision import transforms
+
+        if self._model is None or not self.meta:
+            raise ModelNotAvailable("CNN model is not loaded.")
+        if bgr_crop is None or bgr_crop.size == 0:
+            raise ValueError("Input crop is empty.")
+
+        m = self.meta
+        rgb = Image.fromarray(cv2.cvtColor(bgr_crop, cv2.COLOR_BGR2RGB))
+        tf = transforms.Compose([
+            transforms.Resize((m["img_size"], m["img_size"])),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=m["mean"], std=m["std"]),
+        ])
+        x = tf(rgb).unsqueeze(0)
+        with torch.inference_mode():
+            probs = torch.softmax(self._model(x), dim=1)[0].tolist()
+        idx = int(np.argmax(probs))
+        return {
+            "predicted_class": m["class_names"][idx],
+            "confidence": float(probs[idx]),
+            "class_probabilities": {n: float(p) for n, p in zip(m["class_names"], probs)},
         }
 
     def _predict(self, gray8):

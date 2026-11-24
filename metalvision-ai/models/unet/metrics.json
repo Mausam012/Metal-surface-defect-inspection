@@ -1,0 +1,15 @@
+{
+  "source": "notebooks/Metal_Defect_UNet_Training_(4) (5).ipynb (unseen test split)",
+  "evaluated_on": "test",
+  "n_images": 162,
+  "unit": "images",
+  "summary": {
+    "Dice (mean per image)": 0.6044,
+    "IoU (mean per image)": 0.4712,
+    "Pixel accuracy": 0.8968,
+    "Pixel precision": 0.6267,
+    "Pixel recall": 0.7207,
+    "Dice (all pixels)": 0.6704
+  },
+  "caveat": "Ground-truth masks are filled bounding boxes, not exact defect outlines."
+}

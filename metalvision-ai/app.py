@@ -15,9 +15,8 @@ from werkzeug.utils import secure_filename
 
 import config as cfg
 from backend import history, preprocessing, report_generator, validation, visualization
-from backend.base_model import ModelNotAvailable, make_result
-from backend.inference import predict
 from backend.model_manager import ModelManager
+from backend.pipeline import PIPELINE_NAME, run_inspection, selected_models
 
 # Only these generated files may be served (prevents path traversal / directory listing).
 SERVABLE = {"original_preview.png", "gray.png", "normalized.png", "processed.png",
@@ -38,7 +37,7 @@ def create_app(test_config=None):
     Path(app.config["DB_PATH"]).parent.mkdir(parents=True, exist_ok=True)
     DB = app.config["DB_PATH"]
     history.init_db(DB)
-    manager = ModelManager(app.config["MODELS_DIR"])
+    manager = ModelManager(app.config["MODELS_DIR"], app.config.get("CHECKPOINT_FALLBACKS"))
     app.extensions["mv_manager"] = manager          # lets tests / other code reach the registry
 
     # ------------------------------------------------------------------ helpers
@@ -52,57 +51,46 @@ def create_app(test_config=None):
         out["has_mask"] = result.get("segmentation_mask") is not None
         return out
 
+    def model_choices():
+        return [PIPELINE_NAME] + manager.names()
+
+    def check_model(name):
+        """Validate a model choice; returns the canonical name or raises ValueError."""
+        name = (name or "").strip()
+        if name.lower() == PIPELINE_NAME.lower():
+            return PIPELINE_NAME
+        return manager.get(name).name
+
+    def parse_crop(raw, width, height):
+        """Optional manual region from the upload form -> dict or None (raises ValueError if malformed)."""
+        if raw in (None, "", "null"):
+            return None
+        crop = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(crop, dict) or set(crop) != {"x", "y", "width", "height"}:
+            raise ValueError
+        if any(type(crop[k]) is not int for k in crop):
+            raise ValueError
+        x, y, w, h = crop["x"], crop["y"], crop["width"], crop["height"]
+        if x < 0 or y < 0 or w <= 0 or h <= 0 or x + w > width or y + h > height:
+            raise ValueError
+        return crop
+
     def run_analysis(insp_id: int, model_name: str):
+        rec = get_or_404(insp_id)
         d = insp_dir(insp_id)
-        gray = cv2.imread(str(d / "processed.png"), cv2.IMREAD_GRAYSCALE)
-        if gray is None:
-            raise RuntimeError("Processed image is missing. Run preprocessing again.")
+        # Models were trained on raw images, so they receive the ORIGINAL upload (8-bit BGR),
+        # not the display-normalized copy. OpenCV preprocessing stays available for inspection.
+        original = cv2.imread(str(Path(app.config["UPLOAD_DIR"]) / rec["stored_filename"]), cv2.IMREAD_COLOR)
+        if original is None:
+            raise RuntimeError("Original uploaded image could not be loaded.")
+        meta = rec.get("preprocess_meta") or {}
+        crop = meta.get("manual_crop") or meta.get("resnet_crop")
+        if crop and (crop["x"] + crop["width"] > original.shape[1] or crop["y"] + crop["height"] > original.shape[0]):
+            crop = None
 
-        if model_name.strip().lower() == "resnet":
-            rec = get_or_404(insp_id)
-            crop = (rec.get("preprocess_meta") or {}).get("resnet_crop")
-            if not isinstance(crop, dict):
-                raise ValueError("No ResNet crop is saved. Return to Upload and select a crop.")
-
-            x, y, w, h = (crop.get(k) for k in ("x", "y", "width", "height"))
-            if any(type(v) is not int for v in (x, y, w, h)) or x < 0 or y < 0 or w <= 0 or h <= 0:
-                raise ValueError("The saved ResNet crop coordinates are invalid.")
-
-            original_path = Path(app.config["UPLOAD_DIR"]) / rec["stored_filename"]
-            original = cv2.imread(str(original_path), cv2.IMREAD_COLOR)
-            if original is None:
-                raise RuntimeError("Original uploaded image could not be loaded.")
-            if x + w > original.shape[1] or y + h > original.shape[0]:
-                raise ValueError("The saved ResNet crop is outside the original image.")
-
-            bgr_crop = original[y:y + h, x:x + w]
-            if bgr_crop.size == 0:
-                raise ValueError("The selected ResNet crop is empty.")
-
-            resnet = manager.get("ResNet")
-            resnet.ensure_loaded()
-            started = time.perf_counter()
-            prediction = resnet.predict_crop(bgr_crop)
-            elapsed_ms = (time.perf_counter() - started) * 1000
-
-            result = make_result(
-                "ResNet",
-                model_version=resnet.version(),
-                status="Requires Manual Review",
-                defect_category=prediction["predicted_class"],
-                score=None,
-                confidence=float(prediction["confidence"]),
-                inference_time_ms=round(elapsed_ms, 2),
-                is_real_prediction=True,
-                class_probabilities=prediction["class_probabilities"],
-                crop_coordinates={"x": x, "y": y, "width": w, "height": h},
-                notes=["Classification applies only to the selected crop; this model does not localize defects."]
-            )
-        else:
-            result = predict(gray, model_name, manager)
-
+        result = run_inspection(manager, original, selected_models(model_name), crop)
         real = bool(result["is_real_prediction"])
-        overlays = visualization.render_overlays(gray, result, d, simulated=not real)
+        overlays = visualization.render_overlays(original, result, d, simulated=not real)
         history.update_inspection(
             DB, insp_id, model_used=result["model_name"], model_version=result["model_version"],
             status=result["status"], defect_category=result["defect_category"], score=result["score"],
@@ -132,7 +120,7 @@ def create_app(test_config=None):
     @app.context_processor
     def inject_globals():
         return {"APP_NAME": cfg.APP_NAME, "APP_TAGLINE": cfg.APP_TAGLINE, "APP_VERSION": cfg.APP_VERSION,
-                "NAV": NAV, "MODEL_NAMES": manager.names(), "models_integrated": manager.integrated_count(),
+                "NAV": NAV, "MODEL_NAMES": model_choices(), "PIPELINE_NAME": PIPELINE_NAME, "models_integrated": manager.integrated_count(),
                 "vendor_local": (Path(app.static_folder) / "vendor" / "bootstrap.min.css").exists(),
                 "STATUSES": history.STATUSES, "REVIEW_STATUSES": history.REVIEW_STATUSES}
 
@@ -205,23 +193,17 @@ def create_app(test_config=None):
         model = request.form.get("analyze_with", "").strip()
         if model:
             try:
-                manager.get(model)
+                model = check_model(model)
             except ValueError as exc:
                 return api_error(str(exc))
-
-        crop = None
-        if model.lower() == "resnet":
-            try:
-                crop = json.loads(request.form.get("resnet_crop", ""))
-                if not isinstance(crop, dict) or set(crop) != {"x", "y", "width", "height"}:
-                    raise ValueError()
-                if any(type(crop[k]) is not int for k in crop):
-                    raise ValueError()
-                x, y, w, h = crop["x"], crop["y"], crop["width"], crop["height"]
-                if x < 0 or y < 0 or w <= 0 or h <= 0 or x + w > info["width"] or y + h > info["height"]:
-                    raise ValueError()
-            except (ValueError, TypeError, json.JSONDecodeError):
-                return api_error("Select a valid crop region before running ResNet.")
+        try:
+            crop = parse_crop(request.form.get("manual_crop") or request.form.get("resnet_crop"),
+                              info["width"], info["height"])
+        except (ValueError, TypeError, json.JSONDecodeError):
+            return api_error("The selected region is invalid. Clear it and draw it again.")
+        if model in ("ResNet", "CNN") and crop is None:
+            return api_error(f"{model} classifies a region. Draw a box around the defect, "
+                             f"or choose '{PIPELINE_NAME}' so YOLO finds the regions automatically.")
 
         stored = f"{uuid.uuid4().hex}.{info['extension']}"          # server-generated name
         path = Path(app.config["UPLOAD_DIR"]) / stored
@@ -232,7 +214,7 @@ def create_app(test_config=None):
         try:
             meta = preprocessing.preprocess_image(path, insp_dir(insp_id))
             if crop is not None:
-                meta["resnet_crop"] = crop
+                meta["manual_crop"] = crop
             history.update_inspection(DB, insp_id, bit_depth=meta["bit_depth"], preprocess_settings=meta["settings"], preprocess_meta=meta)
             if model:
                 run_analysis(insp_id, model)
@@ -255,8 +237,8 @@ def create_app(test_config=None):
         except Exception:
             return api_error("Preprocessing failed for this image.", 422)
         previous_meta = rec.get("preprocess_meta") or {}
-        if previous_meta.get("resnet_crop"):
-            meta["resnet_crop"] = previous_meta["resnet_crop"]
+        if previous_meta.get("manual_crop") or previous_meta.get("resnet_crop"):
+            meta["manual_crop"] = previous_meta.get("manual_crop") or previous_meta["resnet_crop"]
         history.update_inspection(DB, insp_id, bit_depth=meta["bit_depth"], preprocess_settings=meta["settings"],
                                   preprocess_meta=meta, status="Uploaded", mode=None, overlays=None, result_json=None,
                                   model_used=None, is_real_prediction=0, score=None, confidence=None,
@@ -268,9 +250,9 @@ def create_app(test_config=None):
         rec = get_or_404(insp_id)
         if rec["is_demo_data"] or not rec.get("stored_filename"):
             return api_error("Demo records have no image to analyze.", 400)
-        model = (request.get_json(silent=True) or {}).get("model", "ResNet")
+        model = (request.get_json(silent=True) or {}).get("model", PIPELINE_NAME)
         try:
-            manager.get(model)
+            model = check_model(model)
             run_analysis(insp_id, model)
         except ValueError as exc:
             return api_error(str(exc))

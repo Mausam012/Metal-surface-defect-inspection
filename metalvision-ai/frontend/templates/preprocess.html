@@ -5,10 +5,10 @@
 {% set s = rec.preprocess_settings or defaults %}
 <div class="mv-page-head">
   <div><h1>Image preprocessing <span class="muted mono">{{ rec.id|mv_id }}</span></h1>
-  <p>{{ rec.original_filename }}. Compare the pipeline stages side by side. Only linear intensity scaling is applied by default, so defect-like patterns are neither created nor removed.</p></div>
+  <p>{{ rec.original_filename }}. Compare the pipeline stages side by side. Only linear intensity scaling is applied by default, so defect-like patterns are neither created nor removed. The models themselves receive the original upload, the same kind of image they were trained on (U-Net applies its own CLAHE step internally).</p></div>
   <div class="d-flex gap-2 align-items-end flex-wrap">
     <div><label class="form-label small mb-1" for="model-select">Model</label>
-    <select id="model-select" class="form-select form-select-sm">{% for m in MODEL_NAMES %}<option {{ 'selected' if m == 'ResNet' }}>{{ m }}</option>{% endfor %}</select></div>
+    <select id="model-select" class="form-select form-select-sm">{% for m in MODEL_NAMES %}<option value="{{ m }}" {{ 'selected' if m == PIPELINE_NAME }}>{{ m }}</option>{% endfor %}</select></div>
     <button class="btn-mv btn" data-analyze="{{ rec.id }}">Analyze image</button>
   </div>
 </div>

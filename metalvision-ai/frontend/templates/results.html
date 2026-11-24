@@ -3,7 +3,9 @@
 {% block crumb %}Inspection results{% endblock %}
 {% block content %}
 {% set analyzed = rec.mode in ('real', 'demonstration') %}
-{% set is_resnet = rec.model_used == 'ResNet' %}
+{% set is_resnet = rec.model_used == 'ResNet' and not result.regions %}
+{% set regions = result.regions or [] %}
+{% set model_runs = result.models or {} %}
 {% set kinds = {'heatmap': 'Heatmap', 'boxes': 'Bounding boxes', 'mask': 'Segmentation mask'} %}
 <div class="mv-page-head">
   <div>
@@ -46,8 +48,8 @@
         <div class="btn-group btn-group-sm" id="overlayTabs">
           {% for k, label in kinds.items() %}<button class="btn btn-outline-secondary" data-kind="{{ k }}" {{ 'disabled' if k not in overlays }}>{{ label }}</button>{% endfor %}
         </div></div>
-      {% if is_resnet %}
-      <p class="muted small">ResNet classifies only the selected crop. It does not locate defects or produce a segmentation mask.</p>
+      {% if model_runs %}
+      <p class="muted small">Boxes: cyan = found by YOLO, orange = drawn by you; each is labelled with its consensus class. Mask: U-Net suspicious pixels.</p>
       {% endif %}
       {% if overlays %}
       <div class="mv-viewer tall" id="vOv"><div class="stage"><img alt="Overlay" src=""></div>
@@ -67,11 +69,13 @@
       <dl class="mv-kv">
         <dt>Status</dt><dd>{{ rec.status }}</dd>
         <dt>Defect category</dt><dd>{{ rec.defect_category or 'Not available' }}</dd>
-{% if not is_resnet %}<dt>Anomaly score</dt><dd>{{ rec.score|num }}</dd>{% endif %}
+{% if not is_resnet %}<dt>{{ 'Top detection score' if regions else 'Anomaly score' }}</dt><dd>{{ rec.score|num }}</dd>{% endif %}
+        {% if regions %}<dt>Regions</dt><dd>{{ regions|length }}</dd>{% endif %}
+        {% if result.mask_coverage is not none and result.mask_coverage is defined %}<dt>U-Net mask area</dt><dd>{{ '%.2f'|format(result.mask_coverage * 100) }}%</dd>{% endif %}
         <dt>Confidence</dt><dd>{{ rec.confidence|num }}</dd>
         <dt>Processing time</dt><dd>{{ (rec.inference_time_ms|string ~ ' ms') if rec.inference_time_ms is not none else 'Not measured' }}</dd>
         <dt>Model</dt><dd>{{ rec.model_used or '—' }}</dd>
-        <dt>Model version</dt><dd>{{ rec.model_version or 'Not available' }}</dd>
+        {% if not model_runs %}<dt>Model version</dt><dd>{{ rec.model_version or 'Not available' }}</dd>{% endif %}
         <dt>Integration</dt><dd>{{ 'Integrated (real inference)' if rec.is_real_prediction else 'Not integrated (demonstration)' if analyzed else '—' }}</dd>
       </dl>
       {% if is_resnet and result.crop_coordinates %}
@@ -96,10 +100,52 @@
   </div>
 </div>
 
+{% if model_runs %}
+<div class="row g-3 mb-3">
+  <div class="col-xl-8">
+    <div class="mv-card flat h-100">
+      <div class="mv-card-head"><h2>Detected regions</h2><span class="muted small">Each region is classified by every model that ran</span></div>
+      {% if regions %}
+      <div class="table-scroll"><table class="mv-table">
+        <thead><tr><th>#</th><th>Location (px)</th><th>YOLO</th><th>ResNet-50</th><th>CNN</th><th>Consensus</th></tr></thead>
+        <tbody>
+        {% for r in regions %}
+          <tr>
+            <td><b>{{ r.id }}</b><span class="region-src">{{ r.source }}</span></td>
+            <td class="mono small">{{ r.x }}, {{ r.y }}<br>{{ r.w }} &times; {{ r.h }}</td>
+            {% for key in ('yolo', 'resnet', 'cnn') %}
+            <td>{% if r[key] %}{{ r[key].label|replace('_', ' ') }}<span class="region-src">{{ '%.1f'|format(r[key].confidence * 100) }}%</span>{% else %}<span class="muted">&mdash;</span>{% endif %}</td>
+            {% endfor %}
+            <td>{% if r.consensus %}<b>{{ r.consensus|replace('_', ' ') }}</b>
+              {% set n, total = r.agreement.split('/') %}<span class="region-src {{ 'agree-full' if n == total else 'agree-part' }}">{{ r.agreement }} models agree</span>
+              {% else %}<span class="muted">&mdash;</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody></table></div>
+      {% else %}<div class="empty">No defect regions were found or selected.</div>{% endif %}
+      <p class="muted small mt-2 mb-0">ResNet-50 knows 5 classes (adds water spot); the CNN knows 4; YOLO was trained on all GC10-DET labels. None of them has a "normal" class, so each always names its most likely defect type.</p>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="mv-card h-100">
+      <h2>Model pipeline</h2>
+      {% for name in ('YOLO', 'ResNet', 'CNN', 'U-Net') %}{% if model_runs[name] %}{% set m = model_runs[name] %}
+      <div class="py-2 border-bottom">
+        <div class="d-flex justify-content-between align-items-center"><b>{{ name }}</b>
+          <span class="model-state {{ m.state }}">{{ {'ran': 'Ran', 'unavailable': 'Not available', 'skipped': 'Skipped', 'failed': 'Failed'}[m.state] }}{% if m.time_ms is defined %} &middot; {{ m.time_ms }} ms{% endif %}</span></div>
+        <div class="muted small">{{ m.message }}</div>
+      </div>
+      {% endif %}{% endfor %}
+      {% if rec.model_version %}<div class="muted small mt-2">Checkpoints: {{ rec.model_version }}</div>{% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div class="mv-card">
   <h2>Run again with another model</h2>
   <div class="d-flex gap-2 align-items-end flex-wrap">
-    <select id="model-select" class="form-select form-select-sm" style="max-width:12rem">{% for m in MODEL_NAMES %}<option {{ 'selected' if m == (rec.model_used or 'ResNet') }}>{{ m }}</option>{% endfor %}</select>
+    <select id="model-select" class="form-select form-select-sm" style="max-width:12rem">{% for m in MODEL_NAMES %}<option value="{{ m }}" {{ 'selected' if m == (rec.model_used or PIPELINE_NAME) }}>{{ m }}</option>{% endfor %}</select>
     <button class="btn-mv btn btn-sm" data-analyze="{{ rec.id }}">Analyze</button>
   </div>
 </div>

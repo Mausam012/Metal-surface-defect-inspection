@@ -3,7 +3,7 @@
 {% block crumb %}ML model comparison{% endblock %}
 {% block content %}
 <div class="mv-page-head"><div><h1>Machine learning models</h1>
-<p>Four architectures, one shared interface. A model counts as integrated only when its checkpoint loads. No accuracy, precision, recall or F1 value appears here unless a real evaluation run produced it.</p></div></div>
+<p>Four architectures, one shared interface. A model counts as integrated only when its checkpoint loads. In <b>Full Inspection</b> they work together: YOLO finds regions, ResNet-50 and the CNN classify each one, U-Net maps suspicious pixels. Metrics shown are the members' real evaluation results.</p></div></div>
 
 <div class="model-grid mb-4">
 {% for m in models %}
@@ -22,10 +22,15 @@
     <div><div class="kv-label">Checkpoint location</div><code class="path">{{ m.checkpoint_hint }}</code></div>
     <div class="small {{ 'text-danger' if m.status.state == 'Load Error' else 'muted' }}">{{ m.status.message }}</div>
     {% if m.metrics %}
-      <div><div class="kv-label">Real evaluation ({{ m.metrics.evaluated_on }} split, {{ m.metrics.n_images }} images)</div>
+      <div><div class="kv-label">Team evaluation ({{ m.metrics.evaluated_on }} split, {{ m.metrics.n_images }} {{ m.metrics.unit or 'images' }})</div>
+      {% if m.metrics.summary %}<dl class="mv-kv mb-1">{% for k, v in m.metrics.summary.items() %}<dt>{{ k }}</dt><dd>{{ '%.3f'|format(v) }}</dd>{% endfor %}</dl>{% endif %}
+      {% if m.metrics.per_class %}
       <table class="mv-table"><thead><tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead><tbody>
       {% for cls, v in m.metrics.per_class.items() %}<tr><td>{{ cls }}</td><td>{{ '%.3f'|format(v.precision) }}</td><td>{{ '%.3f'|format(v.recall) }}</td><td>{{ '%.3f'|format(v['f1-score']) }}</td></tr>{% endfor %}
-      </tbody></table></div>
+      </tbody></table>{% endif %}
+      {% if m.metrics.caveat %}<div class="small muted mt-1">Note: {{ m.metrics.caveat }}</div>{% endif %}
+      {% if m.metrics.source %}<div class="small muted">Source: <code class="path">{{ m.metrics.source }}</code></div>{% endif %}
+      </div>
     {% else %}<div class="small muted">Metrics: not evaluated.</div>{% endif %}
   </div>
 {% endfor %}
@@ -37,13 +42,13 @@
     <thead><tr><th></th>{% for m in models %}<th>{{ m.name }}</th>{% endfor %}</tr></thead>
     <tbody>
       <tr><td>Task</td>{% for m in models %}<td>{{ m.output_type }}</td>{% endfor %}</tr>
-      <tr><td>Localization</td>{% for m in models %}<td>{{ {'CNN': 'None (image-level)', 'YOLO': 'Bounding boxes', 'U-Net': 'Pixel mask', 'ResNet': 'Grad-CAM heatmap (evidence only)'}[m.name] }}</td>{% endfor %}</tr>
-      <tr><td>Needs annotations</td>{% for m in models %}<td>{{ {'CNN': 'Image labels', 'YOLO': 'Box labels', 'U-Net': 'Pixel masks', 'ResNet': 'Image labels'}[m.name] }}</td>{% endfor %}</tr>
+      <tr><td>Localization</td>{% for m in models %}<td>{{ {'CNN': 'None (classifies regions)', 'YOLO': 'Bounding boxes', 'U-Net': 'Pixel mask', 'ResNet': 'None (classifies regions)'}[m.name] }}</td>{% endfor %}</tr>
+      <tr><td>Needs annotations</td>{% for m in models %}<td>{{ {'CNN': 'Labelled crops', 'YOLO': 'Box labels', 'U-Net': 'Pixel masks (from boxes)', 'ResNet': 'Labelled crops'}[m.name] }}</td>{% endfor %}</tr>
       <tr><td>Checkpoint found</td>{% for m in models %}<td>{{ m.status.checkpoint or 'None' }}</td>{% endfor %}</tr>
       <tr><td>Integration status</td>{% for m in models %}<td><span class="badge-s s-{{ m.status.state|replace(' ', '-') }}">{{ m.status.state }}</span></td>{% endfor %}</tr>
-      <tr><td>Macro-F1</td>{% for m in models %}<td>{% if m.metrics %}{{ '%.3f'|format(m.metrics.macro_f1) }} <span class="muted small">({{ m.metrics.evaluated_on }})</span>{% else %}Not evaluated{% endif %}</td>{% endfor %}</tr>
+      <tr><td>Headline metric</td>{% for m in models %}<td>{% if m.metrics and m.metrics.macro_f1 is defined %}Macro-F1 {{ '%.3f'|format(m.metrics.macro_f1) }}{% elif m.metrics and m.metrics.summary %}{% set k = m.metrics.summary.keys()|first %}{{ k }} {{ '%.3f'|format(m.metrics.summary[k]) }}{% else %}Not evaluated{% endif %}</td>{% endfor %}</tr>
       <tr><td>Inference time</td>{% for m in models %}<td>{% if m.metrics and m.metrics.inference_ms_per_image %}{{ m.metrics.inference_ms_per_image }} ms/image{% else %}Not measured{% endif %}</td>{% endfor %}</tr>
     </tbody></table></div>
 </div>
-<p class="muted small mt-2">Comparing the models fairly requires the same data splits and the same metrics for all four. ResNet is itself a CNN family; it has its own slot because it is a separate team responsibility.</p>
+<p class="muted small mt-2">The numbers above come from each member's own split and are not directly comparable. Comparing the models fairly requires the same data splits and the same metrics for all four. ResNet is itself a CNN family; it has its own slot because it is a separate team responsibility.</p>
 {% endblock %}

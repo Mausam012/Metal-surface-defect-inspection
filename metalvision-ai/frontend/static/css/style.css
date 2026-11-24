@@ -79,6 +79,14 @@ dl.mv-kv dt { color: var(--muted); } dl.mv-kv dd { margin: 0; word-break: break-
 .mv-banner.demo { background: var(--warn-bg); border-color: #ecd596; color: #5c3d06; }
 .mv-banner.real { background: var(--ok-bg); border-color: #b9e0cc; color: #14573a; }
 .mv-banner.info { background: var(--info-bg); border-color: #cfdaee; color: #28406b; }
+.mv-banner.warn { background: var(--warn-bg); border-color: #ecd596; color: #5c3d06; }
+.model-state { font-size: .72rem; font-weight: 600; padding: .1rem .45rem; border-radius: 999px; white-space: nowrap; }
+.model-state.ran { background: var(--ok-bg); color: var(--ok); }
+.model-state.unavailable, .model-state.skipped { background: var(--warn-bg); color: #5c3d06; }
+.model-state.failed { background: var(--bad-bg); color: var(--bad); }
+.agree-full { color: var(--ok); font-weight: 600; } .agree-part { color: #8a5a00; font-weight: 600; }
+.region-src { font-size: .72rem; color: var(--muted, #5b6b80); display: block; }
+
 .mv-banner .t { display: block; }
 
 /* ---------- buttons ---------- */

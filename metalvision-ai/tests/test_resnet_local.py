@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import time
 from pathlib import Path
 
@@ -15,6 +15,7 @@ from sklearn.metrics import (
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import config
 from backend.resnet_inference import ResNetModel
 
 # Dataset and checkpoint locations
@@ -24,7 +25,7 @@ CSV_PATH = DATA_DIR / "test.csv"
 # Initialize and load the actual integrated ResNet model
 print("\nLoading ResNet model...")
 
-model = ResNetModel(ROOT / "models")
+model = ResNetModel(ROOT / "models", config.Config.CHECKPOINT_FALLBACKS["resnet"])
 model.ensure_loaded()
 
 class_names = model.meta["class_names"]

@@ -1,0 +1,14 @@
+{
+  "source": "results/opencv_comparison.csv (row 'original', from src/evaluate_opencv.py)",
+  "evaluated_on": "test",
+  "n_images": 208,
+  "unit": "defect crops",
+  "summary": {
+    "Accuracy": 0.8990384615384616,
+    "Macro precision": 0.6933062589584328,
+    "Macro recall": 0.8969411092052602,
+    "Macro-F1": 0.7128528052983957
+  },
+  "macro_f1": 0.7128528052983957,
+  "caveat": "rolled_pit has only 1 test crop, which pulls macro precision and F1 down."
+}

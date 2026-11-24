@@ -65,7 +65,41 @@ def build_report(rec: dict, insp_dir: Path, out_path: Path, app_name: str, versi
     tbl = Table([[Paragraph(f"<b>{k}</b>", body), Paragraph(str(v), body)] for k, v in rows], colWidths=[48 * mm, 126 * mm])
     tbl.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CBD5E0")),
                              ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F4F6F9")), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    el += [tbl, Paragraph("Preprocessing settings (reproducibility)", h2),
+    el.append(tbl)
+
+    res = rec.get("result_json") or {}
+    runs = res.get("models") or {}
+    if runs:
+        el.append(Paragraph("Models in this inspection", h2))
+        state = {"ran": "Ran", "unavailable": "Not available", "skipped": "Skipped", "failed": "Failed"}
+        mrows = [[Paragraph(f"<b>{h}</b>", small) for h in ("Model", "State", "Time", "Detail")]]
+        for name, m in runs.items():
+            mrows.append([Paragraph(escape(name), body), Paragraph(state.get(m.get("state"), "?"), body),
+                          Paragraph(_val(m.get("time_ms"), " ms"), body), Paragraph(escape(m.get("message") or ""), small)])
+        mt = Table(mrows, colWidths=[24 * mm, 26 * mm, 24 * mm, 100 * mm])
+        mt.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CBD5E0")),
+                                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F4F6F9")), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+        el.append(mt)
+    regions = res.get("regions") or []
+    if regions:
+        el.append(Paragraph("Detected regions", h2))
+        def cell(v):
+            return "—" if not v else f"{v['label']} ({v['confidence'] * 100:.1f}%)"
+        rrows = [[Paragraph(f"<b>{h}</b>", small) for h in ("#", "Source", "Box x, y, w, h", "YOLO", "ResNet-50", "CNN", "Consensus")]]
+        for r in regions:
+            rrows.append([Paragraph(str(r["id"]), small), Paragraph(escape(r["source"]), small),
+                          Paragraph(f"{r['x']}, {r['y']}, {r['w']}, {r['h']}", small),
+                          Paragraph(escape(cell(r.get("yolo"))), small), Paragraph(escape(cell(r.get("resnet"))), small),
+                          Paragraph(escape(cell(r.get("cnn"))), small),
+                          Paragraph(f"<b>{escape(r.get('consensus') or '-')}</b> {escape(r.get('agreement') or '')}", small)])
+        rt = Table(rrows, colWidths=[8 * mm, 20 * mm, 26 * mm, 30 * mm, 30 * mm, 30 * mm, 30 * mm], repeatRows=1)
+        rt.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CBD5E0")),
+                                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F4F6F9")), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+        el.append(rt)
+    for note in res.get("notes") or []:
+        el.append(Paragraph(escape(note), small))
+
+    el += [Paragraph("Preprocessing settings (reproducibility)", h2),
            Paragraph(escape(str(rec.get("preprocess_settings") or "not recorded")), small)]
 
     el.append(Paragraph("Images", h2))
