@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% block title %}Results {{ rec.id|mv_id }}{% endblock %}
+{% block crumb %}Inspection results{% endblock %}
+{% block content %}
+{% set analyzed = rec.mode in ('real', 'demonstration') %}
+{% set kinds = {'heatmap': 'Heatmap', 'boxes': 'Bounding boxes', 'mask': 'Segmentation mask'} %}
+<div class="mv-page-head">
+  <div>
+    <h1>{{ rec.id|mv_id }} <span class="badge-s s-{{ rec.status|replace(' ', '-') }}" style="font-size:.8rem;vertical-align:middle">{{ rec.status }}</span>
+      {% if rec.is_demo_data %}<span class="badge-demo">DEMO</span>{% endif %}</h1>
+    <p>{{ rec.original_filename }}{% if rec.analyzed_at %} &middot; analyzed {{ rec.analyzed_at }}{% endif %}</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if not rec.is_demo_data %}<a class="btn-ghost" href="{{ url_for('preprocess_page', insp_id=rec.id) }}">Preprocessing</a>{% endif %}
+    <a class="btn-mv btn" href="{{ url_for('report', insp_id=rec.id) }}">Download PDF report</a>
+  </div>
+</div>
+
+{% if rec.is_demo_data %}
+  <div class="mv-banner demo"><div><strong class="t">DEMO record</strong>This is a sample history entry. It has no image and no model output.</div></div>
+{% elif rec.mode == 'real' %}
+  <div class="mv-banner real"><div><strong class="t">Real model inference ({{ rec.model_used }})</strong>Produced by a loaded checkpoint. Scores are not calibrated. A qualified person must verify every highlighted region.</div></div>
+{% elif rec.mode == 'demonstration' %}
+  <div class="mv-banner demo"><div><strong class="t">Demonstration mode: no AI prediction was made</strong>
+    {{ result.error or 'The selected model has no trained checkpoint.' }}
+    The overlays below are <b>{{ watermark }}</b>. Their position is fixed and unrelated to this image.</div></div>
+{% else %}
+  <div class="mv-banner info"><div><strong class="t">Not analyzed yet</strong>Choose a model and run the analysis.</div></div>
+{% endif %}
+
+{% if not rec.is_demo_data %}
+<div class="row g-3 mb-3">
+  <div class="col-lg-6"><div class="view-title"><h3 class="m-0">Original X-ray</h3></div>
+    <div class="mv-viewer" id="vO"><div class="stage"><img alt="Original X-ray" src="{{ url_for('serve_file', insp_id=rec.id, name='original_preview.png') }}"></div>
+    <div class="tools"><button data-zoom="in" aria-label="Zoom in">+</button><button data-zoom="out" aria-label="Zoom out">&minus;</button><button data-zoom="reset" aria-label="Reset">&#8634;</button></div></div></div>
+  <div class="col-lg-6"><div class="view-title"><h3 class="m-0">Processed X-ray</h3></div>
+    <div class="mv-viewer" id="vP"><div class="stage"><img alt="Processed X-ray" src="{{ url_for('serve_file', insp_id=rec.id, name='processed.png') }}"></div>
+    <div class="tools"><button data-zoom="in" aria-label="Zoom in">+</button><button data-zoom="out" aria-label="Zoom out">&minus;</button><button data-zoom="reset" aria-label="Reset">&#8634;</button></div></div></div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-8">
+    <div class="mv-card">
+      <div class="view-title"><h2 class="m-0">Suspicious-region visualization</h2>
+        <div class="btn-group btn-group-sm" id="overlayTabs">
+          {% for k, label in kinds.items() %}<button class="btn btn-outline-secondary" data-kind="{{ k }}" {{ 'disabled' if k not in overlays }}>{{ label }}</button>{% endfor %}
+        </div></div>
+      {% if overlays %}
+      <div class="mv-viewer tall" id="vOv"><div class="stage"><img alt="Overlay" src=""></div>
+        
+        <div class="tools"><button data-zoom="in" aria-label="Zoom in">+</button><button data-zoom="out" aria-label="Zoom out">&minus;</button><button data-zoom="reset" aria-label="Reset">&#8634;</button></div></div>
+      <div class="legend">
+        <span><i style="background:linear-gradient(90deg,#1c3fd0,#2fe0d0,#f2e13a,#d92b1c)"></i>Heatmap: blue = low, red = high evidence</span>
+        <span><i style="background:#19c3d6"></i>Box: detected region</span><span><i style="background:#e63c3c"></i>Mask: suspicious pixels</span>
+      </div>
+      {% else %}<div class="empty">This model returned no localization output.</div>{% endif %}
+      <p class="muted small mt-2 mb-0">Highlighted regions are suspicious areas that need human verification. Heatmaps such as Grad-CAM show where the model looked, not exact defect boundaries.</p>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="mv-card mb-3">
+      <h2>Result</h2>
+      <dl class="mv-kv">
+        <dt>Status</dt><dd>{{ rec.status }}</dd>
+        <dt>Defect category</dt><dd>{{ rec.defect_category or 'Not available' }}</dd>
+        <dt>Anomaly score</dt><dd>{{ rec.score|num }}</dd>
+        <dt>Confidence</dt><dd>{{ rec.confidence|num }}</dd>
+        <dt>Processing time</dt><dd>{{ (rec.inference_time_ms|string ~ ' ms') if rec.inference_time_ms is not none else 'Not measured' }}</dd>
+        <dt>Model</dt><dd>{{ rec.model_used or '—' }}</dd>
+        <dt>Model version</dt><dd>{{ rec.model_version or 'Not available' }}</dd>
+        <dt>Integration</dt><dd>{{ 'Integrated (real inference)' if rec.is_real_prediction else 'Not integrated (demonstration)' if analyzed else '—' }}</dd>
+      </dl>
+      {% if result.notes %}<ul class="muted small mt-2 mb-0 ps-3">{% for n in result.notes %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+    <div class="mv-card">
+      <h2>Human review</h2>
+      <select id="reviewStatus" class="form-select form-select-sm mb-2">{% for r in REVIEW_STATUSES %}<option {{ 'selected' if r == rec.review_status }}>{{ r }}</option>{% endfor %}</select>
+      <textarea id="reviewNote" class="form-control form-control-sm mb-2" rows="2" maxlength="500" placeholder="Reviewer note (optional)">{{ rec.review_note or '' }}</textarea>
+      <button class="btn-ghost btn-sm" id="saveReview">Save review</button>
+    </div>
+  </div>
+</div>
+
+<div class="mv-card">
+  <h2>Run again with another model</h2>
+  <div class="d-flex gap-2 align-items-end flex-wrap">
+    <select id="model-select" class="form-select form-select-sm" style="max-width:12rem">{% for m in MODEL_NAMES %}<option {{ 'selected' if m == (rec.model_used or 'ResNet') }}>{{ m }}</option>{% endfor %}</select>
+    <button class="btn-mv btn btn-sm" data-analyze="{{ rec.id }}">Analyze</button>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const ID = {{ rec.id }}, FILES = {{ overlays|tojson }};
+  const tabs = document.querySelectorAll("#overlayTabs button");
+  function show(kind) {
+    tabs.forEach((b) => b.classList.toggle("active", b.dataset.kind === kind));
+    MV.viewers["vOv"]?.setSrc(`/files/${ID}/${FILES[kind]}?v=${Date.now()}`);
+  }
+  tabs.forEach((b) => b.addEventListener("click", () => show(b.dataset.kind)));
+  const first = Object.keys(FILES)[0]; if (first) show(first);
+  document.getElementById("saveReview")?.addEventListener("click", async () => {
+    try {
+      await MV.api(`/api/inspections/${ID}/review`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ review_status: document.getElementById("reviewStatus").value, note: document.getElementById("reviewNote").value }) });
+      MV.toast("Review saved.", "success");
+    } catch (e) { MV.toast(e.message); }
+  });
+});
+</script>
+{% endblock %}

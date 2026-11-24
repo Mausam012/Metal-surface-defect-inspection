@@ -14,3 +14,5 @@ torchvision>=0.16
 
 # --- Optional: only the YOLO team member needs this ---
 # ultralytics>=8.0
+
+ultralytics>=8.0

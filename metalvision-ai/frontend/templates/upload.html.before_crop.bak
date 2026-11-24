@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Upload{% endblock %}
+{% block crumb %}Upload X-ray image{% endblock %}
+{% block content %}
+<div class="mv-page-head"><div><h1>Upload an X-ray image</h1>
+<p>Radiographic images only: PNG, JPG, JPEG or TIFF up to {{ max_mb }} MB. The file you upload is stored untouched; every processing step writes a new copy.</p></div></div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="mv-card">
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose or drop an X-ray image">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <p class="mb-1 mt-2"><b>Drop an image here</b> or choose a file</p>
+        <button type="button" class="btn-ghost" id="browseBtn">Browse files</button>
+        <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.tif,.tiff" hidden>
+      </div>
+      <div id="errorBox" class="mv-banner" style="background:var(--bad-bg);color:var(--bad);display:none;margin:1rem 0 0"></div>
+      <div class="mt-3 d-flex flex-wrap gap-2 align-items-end">
+        <div><label class="form-label small mb-1" for="model-select">Model</label>
+          <select id="model-select" class="form-select form-select-sm">{% for m in MODEL_NAMES %}<option {{ 'selected' if m == 'ResNet' }}>{{ m }}</option>{% endfor %}</select></div>
+        <button class="btn-mv btn" id="analyzeBtn" disabled>Analyze image</button>
+        <button class="btn-ghost" id="prepOnlyBtn" disabled>Preprocess only</button>
+      </div>
+      <p class="muted small mt-2 mb-0">Without a trained checkpoint the result page runs in labelled demonstration mode.</p>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="mv-card">
+      <h2>Preview</h2>
+      <div class="preview-box" id="previewBox"><span>No image selected</span></div>
+      <dl class="mv-kv mt-3" id="metaList">
+        <dt>File name</dt><dd id="mName">—</dd><dt>Format</dt><dd id="mFormat">—</dd>
+        <dt>Dimensions</dt><dd id="mDim">—</dd><dt>File size</dt><dd id="mSize">—</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script>window.MAX_MB = {{ max_mb }};</script><script src="{{ url_for('static', filename='js/upload.js') }}"></script>{% endblock %}
