@@ -29,4 +29,10 @@ dataset/raw/
 
 # Operating system files
 .DS_Store
+
+# Generated CNN crop images
+dataset/cnn_crops/
+
+# Keep trained CNN model out of general ignore
+# Model will be selectively added when needed
 Thumbs.db
