@@ -1,0 +1,39 @@
+METALVISION AI - RESNET50 EVALUATION REPORT
+=======================================================
+
+ORIGINAL TEST SET
+Test samples: 202
+Unique original images: 154
+Correct predictions: 193
+Incorrect predictions: 9
+Accuracy: 95.54%
+Macro-F1: 0.860644
+Reproduced test loss: 0.21742
+
+CLASS-WISE METRICS
+        class  precision  recall  f1_score  support
+    silk_spot     0.9829  0.9746    0.9787      118
+    inclusion     0.9592  0.9400    0.9495       50
+waist_folding     1.0000  1.0000    1.0000       21
+   rolled_pit     0.7778  1.0000    0.8750        7
+   water_spot     0.5000  0.5000    0.5000        6
+
+CONFUSION MATRIX
+               silk_spot  inclusion  waist_folding  rolled_pit  water_spot
+silk_spot            115          1              0           1           1
+inclusion              0         47              0           1           2
+waist_folding          0          0             21           0           0
+rolled_pit             0          0              0           7           0
+water_spot             2          1              0           0           3
+
+LOCAL CPU PERFORMANCE (SEPARATE TEST)
+Timed crops: 50
+Average: 58.02 ms/crop
+Median: 58.05 ms/crop
+Throughput: 17.23 crops/sec
+
+NOTES
+- Evaluation used original PIL aspect-preserving resize and grey padding.
+- The historical recorded test loss was 0.378935; the reproduced loss was 0.21742. These have not been reconciled.
+- Local CPU speed benchmark is a separate measurement from the 202-crop evaluation.
+- Grad-CAM provides visual evidence, not exact defect boundaries.

@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}ML Models{% endblock %}
+{% block crumb %}ML model comparison{% endblock %}
+{% block content %}
+<div class="mv-page-head"><div><h1>Machine learning models</h1>
+<p>Four architectures, one shared interface. A model counts as integrated only when its checkpoint loads. No accuracy, precision, recall or F1 value appears here unless a real evaluation run produced it.</p></div></div>
+
+<div class="model-grid mb-4">
+{% for m in models %}
+  <div class="mv-card model-card">
+    <h3>{{ m.name }} <span class="badge-s s-{{ m.status.state|replace(' ', '-') }}">{{ m.status.state }}</span></h3>
+    <div class="muted small">{{ m.architecture }}</div>
+    <div><div class="kv-label">How it works</div>{{ m.description }}</div>
+    <div><div class="kv-label">Purpose</div>{{ m.purpose }}</div>
+    <div><div class="kv-label">Expected output</div>{{ m.expected_output }}</div>
+    {% if m.name == 'ResNet' %}
+      <div><div class="kv-label">Residual learning</div><span class="formula">y = F(x) + x</span>
+      <div class="small muted mt-1">The block learns a correction F(x); the skip connection adds the input back.</div></div>
+    {% endif %}
+    {% if m.name == 'U-Net' %}<div class="small muted">Encoder path compresses the image, decoder path restores resolution, skip connections preserve detail.</div>{% endif %}
+    <ul>{% for e in m.extras %}<li>{{ e }}</li>{% endfor %}</ul>
+    <div><div class="kv-label">Checkpoint location</div><code class="path">{{ m.checkpoint_hint }}</code></div>
+    <div class="small {{ 'text-danger' if m.status.state == 'Load Error' else 'muted' }}">{{ m.status.message }}</div>
+    {% if m.metrics %}
+      <div><div class="kv-label">Real evaluation ({{ m.metrics.evaluated_on }} split, {{ m.metrics.n_images }} images)</div>
+      <table class="mv-table"><thead><tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead><tbody>
+      {% for cls, v in m.metrics.per_class.items() %}<tr><td>{{ cls }}</td><td>{{ '%.3f'|format(v.precision) }}</td><td>{{ '%.3f'|format(v.recall) }}</td><td>{{ '%.3f'|format(v['f1-score']) }}</td></tr>{% endfor %}
+      </tbody></table></div>
+    {% else %}<div class="small muted">Metrics: not evaluated.</div>{% endif %}
+  </div>
+{% endfor %}
+</div>
+
+<div class="mv-card flat">
+  <div class="mv-card-head"><h2>Comparison</h2></div>
+  <div class="table-scroll"><table class="mv-table">
+    <thead><tr><th></th>{% for m in models %}<th>{{ m.name }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      <tr><td>Task</td>{% for m in models %}<td>{{ m.output_type }}</td>{% endfor %}</tr>
+      <tr><td>Localization</td>{% for m in models %}<td>{{ {'CNN': 'None (image-level)', 'YOLO': 'Bounding boxes', 'U-Net': 'Pixel mask', 'ResNet': 'Grad-CAM heatmap (evidence only)'}[m.name] }}</td>{% endfor %}</tr>
+      <tr><td>Needs annotations</td>{% for m in models %}<td>{{ {'CNN': 'Image labels', 'YOLO': 'Box labels', 'U-Net': 'Pixel masks', 'ResNet': 'Image labels'}[m.name] }}</td>{% endfor %}</tr>
+      <tr><td>Checkpoint found</td>{% for m in models %}<td>{{ m.status.checkpoint or 'None' }}</td>{% endfor %}</tr>
+      <tr><td>Integration status</td>{% for m in models %}<td><span class="badge-s s-{{ m.status.state|replace(' ', '-') }}">{{ m.status.state }}</span></td>{% endfor %}</tr>
+      <tr><td>Macro-F1</td>{% for m in models %}<td>{% if m.metrics %}{{ '%.3f'|format(m.metrics.macro_f1) }} <span class="muted small">({{ m.metrics.evaluated_on }})</span>{% else %}Not evaluated{% endif %}</td>{% endfor %}</tr>
+      <tr><td>Inference time</td>{% for m in models %}<td>{% if m.metrics and m.metrics.inference_ms_per_image %}{{ m.metrics.inference_ms_per_image }} ms/image{% else %}Not measured{% endif %}</td>{% endfor %}</tr>
+    </tbody></table></div>
+</div>
+<p class="muted small mt-2">Comparing the models fairly requires the same data splits and the same metrics for all four. ResNet is itself a CNN family; it has its own slot because it is a separate team responsibility.</p>
+{% endblock %}

@@ -1,0 +1,6 @@
+class,precision,recall,f1_score,support
+silk_spot,0.9829,0.9746,0.9787,118
+inclusion,0.9592,0.94,0.9495,50
+waist_folding,1.0,1.0,1.0,21
+rolled_pit,0.7778,1.0,0.875,7
+water_spot,0.5,0.5,0.5,6

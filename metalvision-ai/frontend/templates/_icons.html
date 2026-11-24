@@ -1,0 +1,21 @@
+{# Inline SVG icons (no external icon font needed). Usage: {{ icon('upload') }} #}
+{% macro icon(name) -%}
+<svg viewBox="0 0 24 24" aria-hidden="true">
+{%- if name == 'dashboard' %}<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>
+{%- elif name == 'upload' %}<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+{%- elif name == 'sliders' %}<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
+{%- elif name == 'scan' %}<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/>
+{%- elif name == 'cpu' %}<rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>
+{%- elif name == 'clock' %}<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>
+{%- elif name == 'info' %}<circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+{%- endif %}</svg>
+{%- endmacro %}
+
+{% macro logo(size=34) -%}
+<svg width="{{ size }}" height="{{ size }}" viewBox="0 0 40 40" role="img" aria-label="MetalVision AI logo">
+  <rect x="2" y="2" width="36" height="36" rx="9" fill="#11294a" stroke="#1fb5c9" stroke-width="1.5"/>
+  <path d="M9 26h22M9 20h22M9 14h22" stroke="#2c4f7e" stroke-width="1.2"/>
+  <path d="M10 27 L17 12 L22 22 L26 16 L31 27" fill="none" stroke="#e8f6fa" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  <line x1="6" y1="19" x2="34" y2="19" stroke="#1fb5c9" stroke-width="1.6" stroke-dasharray="2 2.5"/>
+</svg>
+{%- endmacro %}
