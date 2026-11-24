@@ -137,7 +137,7 @@ Each model looks in `models/<name>/` first and loads the newest `.pt` / `.pth` f
 | CNN | `models/cnn/` | `../models/cnn_four_class.pth` |
 | ResNet | `models/resnet/` | `ResNet_Handoff/models/resnet/resnet50_best.pth` (Git LFS) |
 | YOLO | `models/yolo/` | `../yolo_part/models/balanced_v3_best.pt` |
-| U-Net | `models/unet/` | none: put `best_unet_opencv_improved.pth` here |
+| U-Net | `models/unet/` | none: install with `python scripts/install_unet.py <file, zip or folder>` |
 
 A file is reloaded automatically when it changes (path + modification time). `*.pt` / `*.pth` files inside `models/*/` are ignored by Git.
 
@@ -247,6 +247,6 @@ Pipeline tuning constants live at the top of `backend/pipeline.py` (`MAX_REGIONS
 | `ResNet_Handoff/` | ResNet-50 weights (Git LFS), a standalone copy of its inference code, and the evaluation reports |
 | `resnet_local_test/` | The 202 ResNet test crops and `test.csv` |
 | `models/<name>/` | Optional weights files, `metrics.json`, model notes |
-| `scripts/` | `download_vendor.py` (Bootstrap and Chart.js for offline use), `make_synthetic_sample.py`, `test_resnet_crops.py` |
+| `scripts/` | `install_unet.py` (installs the U-Net file from a `.pth`, a `.zip` or an extracted folder, then verifies it), `download_vendor.py` (Bootstrap and Chart.js for offline use), `make_synthetic_sample.py`, `test_resnet_crops.py` |
 | `notebooks/dataset_exploration.ipynb` | Dataset exploration starter |
 | `uploads/`, `processed/`, `reports/`, `database/` | Created at runtime, ignored by Git |

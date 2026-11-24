@@ -202,17 +202,24 @@ If you already cloned before installing Git LFS, run `git lfs install` and then 
 
 ### Step 2: Add the U-Net weights
 
-The U-Net file is not in Git. Get `best_unet_opencv_improved.pth` (about 1.9 MB) from a teammate or from the team Google Drive (`My Drive/Metal_Defect_Project/`). Put it in:
+The U-Net file is not in Git. Get `best_unet_opencv_improved.pth` (about 1.9 MB) from a teammate or from the team Google Drive (`My Drive/Metal_Defect_Project/`). Install it **after Step 3**, with the virtual environment active:
 
+```bash
+python scripts/install_unet.py "C:\path\to\what-you-received"
 ```
-metalvision-ai/models/unet/best_unet_opencv_improved.pth
-```
 
-> **Do not unzip it.** A `.pth` file is internally a zip archive, and Windows sometimes extracts it into a folder when downloading. If you end up with a folder instead of a file, ask for the file again.
+The script accepts any of these and checks that the result really is the team's U-Net before installing it:
+- the `.pth` file itself;
+- a `.zip` that contains it (e.g. a WhatsApp or Drive download);
+- a **folder**, if Windows unzipped the `.pth`. A `.pth` is internally a zip archive, so this happens often; the folder contains `data.pkl`, `data/`, `byteorder` and `version`.
 
-The app still runs without it; U-Net then shows as *Not Integrated*.
+It writes `metalvision-ai/models/unet/best_unet_opencv_improved.pth` and prints `Verified: 36 tensors, 482,033 parameters`.
 
-### Step 3: Install
+> **Don't re-zip an extracted folder with Windows** (right-click → Compressed folder, or `Compress-Archive`). Windows writes paths that PyTorch cannot read. Use the script instead.
+
+The app still runs without the file; U-Net then shows as *Not Integrated*.
+
+### Step 3: Install the Python packages
 
 ```bash
 cd metalvision-ai
@@ -244,7 +251,8 @@ python -m pytest -q tests      # expected: 5 passed (about 1 minute)
 |---|---|---|
 | ResNet shows *Load Error* | Git LFS was not installed, so you have a 1 KB placeholder instead of the weights | `git lfs install` then `git lfs pull` |
 | U-Net shows *Not Integrated* | The file is missing from `models/unet/` | Step 2 |
-| U-Net shows *Load Error* | The file was unzipped, renamed to a folder, or comes from a different architecture | Get the original file again |
+| U-Net shows *Load Error* | A wrong or broken file was copied in by hand | Run `python scripts/install_unet.py` on what you received (Step 2) |
+| `install_unet.py` says "not the team's U-Net checkpoint" | You were sent a different file (e.g. another model) | Ask for `best_unet_opencv_improved.pth` again |
 | YOLO shows *Not Integrated* | `ultralytics` is not installed | `pip install -r requirements.txt` |
 | `pip` downloads a huge `torch` wheel | It picked the GPU build | Use the `--index-url .../whl/cpu` line first |
 | Port 5000 busy | Another program is using it | Edit the last line of `app.py` to another port, e.g. `port=5001` |
