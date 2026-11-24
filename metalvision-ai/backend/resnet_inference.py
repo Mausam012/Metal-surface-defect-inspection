@@ -1,43 +1,121 @@
-"""ResNet module  (owner: ResNet team member).
 
-WHAT IS A RESNET?
-    A plain deep CNN gets *harder* to train as layers are added (vanishing
-    gradients / degradation). ResNet adds a "skip connection" around a few layers:
+"""ResNet module - Five-class metal defect crop classification.
 
-            y = F(x) + x
+ARCHITECTURE:
+    ResNet50 is a deep convolutional neural network that uses residual
+    (skip) connections to improve information and gradient flow.
 
-    x  : input of the block
-    F(x): what the stacked conv layers learn (the *residual*)
-    y  : block output.   If the best mapping is "do nothing", the block only has
-         to learn F(x) = 0, which is easy -- and gradients flow straight through
-         the "+ x" path. That is why 50+ layer networks train well.
-    (If x and F(x) differ in shape, a 1x1 convolution on the shortcut matches them.)
-    See models/resnet/residual_block_demo.py for a ~30-line implementation.
+    A residual block learns:
+        y = F(x) + x
 
-TRANSFER LEARNING
-    Start from weights pretrained on ImageNet (generic edges/textures), replace
-    the final fully-connected layer `fc` with a new one for our classes, then
-    fine-tune on X-ray data. Needs far fewer labelled images than training from scratch.
+    The shortcut connection helps deep networks train effectively.
 
-GRAYSCALE X-RAYS
-    Pretrained ResNets expect 3 channels. Two valid options:
-      A) (default) repeat the gray channel 3x            -> in_channels=3
-      B) sum the 3 pretrained conv1 filters into one      -> in_channels=1
-    The chosen option is stored in the checkpoint so inference matches training.
+TRANSFER LEARNING:
+    The model uses ImageNet-pretrained ResNet50 weights as its starting
+    point. Its final fully connected layer is replaced with a five-class
+    classification layer and fine-tuned on metal defect crops.
 
-STATUS: this module is a TEMPLATE. Until a genuine checkpoint produced by
-backend/resnet_training.py is placed in models/resnet/, the model is reported
-as "Not Integrated" and NO prediction is produced.
+INPUT:
+    OpenCV BGR colour image containing a metal defect crop.
+    The image is converted to RGB, resized to 224 x 224 while preserving
+    aspect ratio, padded with grey, and ImageNet-normalized.
+
+OUTPUT CLASSES:
+    1. silk_spot
+    2. inclusion
+    3. waist_folding
+    4. rolled_pit
+    5. water_spot
+
+PREDICTION:
+    Use predict_crop(bgr_crop) to obtain the predicted class, confidence,
+    and probabilities for all five classes.
+
+GRAD-CAM:
+    Grad-CAM provides a visual indication of image regions influencing
+    the prediction. It is an evidence map, not an exact defect boundary.
+
+CHECKPOINT:
+    models/resnet/resnet50_best.pth
+
+NOTE:
+    This module supports five-class RGB crop classification. It does not
+    implement normal-versus-defect classification on grayscale images.
 """
+
 import cv2
 import numpy as np
 
-from .base_model import BaseModel, ModelNotAvailable, score_to_status
-from .torch_utils import gray_to_tensor, load_checkpoint, require_torch, split_probs
+from .base_model import BaseModel, ModelNotAvailable
+from .torch_utils import require_torch
 
 SUPPORTED_ARCHS = ("resnet18", "resnet34", "resnet50")
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
+def bgr_crop_to_tensor(bgr_crop, img_size=224, mean=IMAGENET_MEAN, std=IMAGENET_STD):
+    """
+    Preprocess an OpenCV BGR defect crop for ResNet50.
+
+    Steps:
+    1. Convert BGR to RGB.
+    2. Resize while preserving aspect ratio.
+    3. Apply grey padding.
+    4. Convert to PyTorch tensor.
+    5. Apply ImageNet normalization.
+    """
+    import torch
+
+    if bgr_crop is None or bgr_crop.size == 0:
+        raise ValueError("Input crop is empty.")
+
+    if bgr_crop.ndim != 3 or bgr_crop.shape[2] != 3:
+        raise ValueError("Expected a 3-channel BGR image.")
+
+    # Convert OpenCV BGR image to RGB
+    rgb = cv2.cvtColor(bgr_crop, cv2.COLOR_BGR2RGB)
+
+    h, w = rgb.shape[:2]
+
+    # Calculate dimensions while preserving aspect ratio
+    # Preserve aspect ratio without enlarging small crops
+    scale = min(1.0, img_size / w, img_size / h)
+
+    new_w = max(1, round(w * scale))
+    new_h = max(1, round(h * scale))
+
+    # Resize using OpenCV Lanczos interpolation
+    resized = cv2.resize(
+        rgb,
+        (new_w, new_h),
+        interpolation=cv2.INTER_LANCZOS4
+    )
+
+    # Create grey canvas
+    canvas = np.full(
+        (img_size, img_size, 3),
+        128,
+        dtype=np.uint8
+    )
+
+    # Place resized image in the centre
+    x = (img_size - new_w) // 2
+    y = (img_size - new_h) // 2
+
+    canvas[y:y + new_h, x:x + new_w] = resized
+
+    # Convert HWC to CHW and scale pixels to [0, 1]
+    tensor = torch.from_numpy(
+        canvas.transpose(2, 0, 1).copy()
+    ).float() / 255.0
+
+    # ImageNet normalization
+    mean = torch.tensor(mean, dtype=torch.float32).view(3, 1, 1)
+    std = torch.tensor(std, dtype=torch.float32).view(3, 1, 1)
+
+    tensor = (tensor - mean) / std
+
+    # Add batch dimension
+    return tensor.unsqueeze(0)
 
 
 def build_resnet(arch="resnet18", num_classes=2, pretrained=False, in_channels=3):
@@ -70,39 +148,184 @@ def build_resnet(arch="resnet18", num_classes=2, pretrained=False, in_channels=3
 
 
 class ResNetModel(BaseModel):
+   
     name = "ResNet"
     dir_name = "resnet"
-    architecture = "Residual Neural Network (ResNet-18 / 34 / 50)"
-    description = ("Deep CNN with skip connections, y = F(x) + x. The shortcut lets gradients "
-                   "flow through very deep networks, so pretrained ResNets are strong starting "
-                   "points for transfer learning.")
-    purpose = "Image-level classification: normal vs. suspicious (optionally multi-class defect type)."
-    expected_output = "Class probabilities -> defect score, status and (optionally) a Grad-CAM heatmap."
-    output_type = "Image classification (+ Grad-CAM heatmap)"
-    checkpoint_hint = "models/resnet/resnet18_best.pt  (created by backend/resnet_training.py)"
-    extras = ["Variants: ResNet-18, ResNet-34, ResNet-50",
-              "Transfer learning from ImageNet weights, new final layer",
-              "Grad-CAM shows evidence regions, NOT exact defect boundaries"]
+    architecture = "ResNet-50"
+    description = (
+        "Deep convolutional neural network using residual skip connections. "
+        "Uses ImageNet transfer learning and a fine-tuned classification head "
+        "to identify five types of metal surface defects."
+    )
+    purpose = "Five-class classification of RGB metal defect crops."
+    expected_output = (
+        "Predicted defect class, confidence, and probabilities "
+        "for all five defect classes."
+    )
+    output_type = "Five-class image classification"
+    checkpoint_hint = "models/resnet/resnet50_best.pth"
+    extras = [
+        "Architecture: ResNet-50",
+        "Transfer learning from ImageNet",
+        "Input: RGB defect crops resized to 224 x 224",
+        "Classes: silk_spot, inclusion, waist_folding, rolled_pit, water_spot",
+        "Grad-CAM can provide visual evidence, not exact defect boundaries"
+    ]
 
+    
     def load(self, checkpoint_path):
-        require_torch()
-        ck = load_checkpoint(checkpoint_path)
+        """Load and validate the trained five-class ResNet checkpoint."""
+
+        torch = require_torch()
+
+        try:
+            ck = torch.load(
+                str(checkpoint_path),
+                map_location="cpu",
+                weights_only=True
+            )
+        except Exception as exc:
+            raise ModelNotAvailable(
+                f"Could not load ResNet checkpoint: {type(exc).__name__}"
+            )
+
+        if not isinstance(ck, dict):
+            raise ModelNotAvailable("Invalid checkpoint format.")
+
+        required_keys = ["arch", "class_names", "model_state_dict"]
+        missing = [key for key in required_keys if key not in ck]
+
+        if missing:
+            raise ModelNotAvailable(
+                f"Checkpoint is missing keys: {missing}"
+            )
+
         arch = ck["arch"]
-        if arch not in SUPPORTED_ARCHS:
-            raise ModelNotAvailable(f"Unsupported architecture '{arch}' in checkpoint.")
         names = list(ck["class_names"])
-        in_ch = int(ck.get("in_channels", 3))
-        model = build_resnet(arch, len(names), pretrained=False, in_channels=in_ch)
-        model.load_state_dict(ck["state_dict"])
+
+        expected_classes = [
+            "silk_spot",
+            "inclusion",
+            "waist_folding",
+            "rolled_pit",
+            "water_spot"
+        ]
+
+        if arch not in SUPPORTED_ARCHS:
+            raise ModelNotAvailable(
+                f"Unsupported architecture: {arch}"
+            )
+
+        if names != expected_classes:
+            raise ModelNotAvailable(
+                f"Unexpected class order: {names}"
+            )
+
+        img_size = int(ck.get("img_size", 224))
+        mean = list(ck.get("mean", IMAGENET_MEAN))
+        std = list(ck.get("std", IMAGENET_STD))
+
+        if img_size <= 0:
+            raise ModelNotAvailable("Invalid checkpoint image size.")
+
+        if len(mean) != 3 or len(std) != 3:
+            raise ModelNotAvailable("Invalid RGB normalization values.")
+
+        if not np.all(np.isfinite(mean)) or not np.all(np.isfinite(std)):
+            raise ModelNotAvailable("Normalization values must be finite.")
+
+        if any(value <= 0 for value in std):
+            raise ModelNotAvailable("Standard deviation values must be positive.")
+
+        in_ch = 3
+
+        model = build_resnet(
+            arch=arch,
+            num_classes=len(names),
+            pretrained=False,
+            in_channels=in_ch
+        )
+
+        try:
+            model.load_state_dict(
+                ck["model_state_dict"],
+                strict=True
+            )
+        except Exception as exc:
+            raise ModelNotAvailable(
+                f"Checkpoint weights are incompatible: {type(exc).__name__}"
+            )
+
         model.eval()
         self._model = model
+
         self.meta = {
-            "arch": arch, "class_names": names, "in_channels": in_ch,
-            "img_size": int(ck.get("img_size", 224)),
-            "mean": list(ck.get("mean", IMAGENET_MEAN if in_ch == 3 else [0.45])),
-            "std": list(ck.get("std", IMAGENET_STD if in_ch == 3 else [0.225])),
-            "version": f"{arch} / {checkpoint_path.name}",
+            "arch": arch,
+            "class_names": names,
+            "in_channels": in_ch,
+            "img_size": img_size,
+            "mean": mean,
+            "std": std,
+            "version": f"{arch} / {checkpoint_path.name}"
         }
+
+        print("ResNet checkpoint loaded successfully.")
+        print("Architecture:", arch)
+        print("Classes:", names)
+        print("Input size:", self.meta["img_size"])
+
+    
+    def predict_crop(self, bgr_crop):
+        """
+        Classify a defect crop using the trained five-class ResNet.
+        Input: OpenCV BGR image.
+        """
+
+        torch = require_torch()
+
+        # Check whether the model is loaded
+        if self._model is None or not self.meta:
+            raise ModelNotAvailable("ResNet model is not loaded.")
+
+        # Preprocess the input crop
+        x = bgr_crop_to_tensor(
+            bgr_crop,
+            self.meta["img_size"],
+            self.meta["mean"],
+            self.meta["std"]
+        )
+
+        # Run prediction
+        self._model.eval()
+
+        with torch.inference_mode():
+            logits = self._model(x)
+            probabilities = torch.softmax(logits, dim=1)[0]
+
+        # Convert probabilities into a Python list
+        probs = probabilities.cpu().tolist()
+
+        class_names = self.meta["class_names"]
+
+        # Find the class with the highest probability
+        predicted_index = int(probabilities.argmax().item())
+
+        predicted_class = class_names[predicted_index]
+        confidence = float(probs[predicted_index])
+
+        # Store probabilities for all five classes
+        class_probabilities = {
+            name: float(prob)
+            for name, prob in zip(class_names, probs)
+        }
+
+        return {
+            "predicted_class": predicted_class,
+            "confidence": confidence,
+            "class_probabilities": class_probabilities
+        }
+  
+
 
     def _gradcam(self, x, class_idx):
         """Grad-CAM on the last residual stage. Evidence map only, not a segmentation."""
@@ -125,22 +348,10 @@ class ResNetModel(BaseModel):
         cam -= cam.min()
         return (cam / cam.max()).astype(np.float32) if cam.max() > 0 else cam.astype(np.float32)
 
+    
     def _predict(self, gray8):
-        torch = require_torch()
-        m = self.meta
-        x = gray_to_tensor(gray8, m["img_size"], m["in_channels"], m["mean"], m["std"])
-        with torch.no_grad():
-            probs = torch.softmax(self._model(x), dim=1)[0].tolist()
-        p_defect, defect_idx, category = split_probs(probs, m["class_names"])
-        status = score_to_status(p_defect)
-        heat = self._gradcam(x, defect_idx)
-        heat = cv2.resize(heat, (gray8.shape[1], gray8.shape[0]), interpolation=cv2.INTER_LINEAR)
-        return {
-            "status": status,
-            "defect_category": category if status != "Normal" else None,
-            "score": p_defect,
-            "confidence": float(max(probs)),
-            "heatmap": heat,
-            "notes": ["Softmax probabilities are not calibrated.",
-                      "Grad-CAM is an evidence map, not a defect boundary."],
-        }
+        """The five-class ResNet accepts RGB crops through predict_crop()."""
+        raise ModelNotAvailable(
+            "This ResNet model supports five-class RGB crop classification. "
+            "Use predict_crop(bgr_crop) instead of predict(gray8)."
+        )

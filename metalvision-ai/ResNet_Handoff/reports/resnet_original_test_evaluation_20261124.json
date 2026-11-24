@@ -1,0 +1,37 @@
+{
+    "model": "ResNet50",
+    "checkpoint": "models/resnet/resnet50_best.pth",
+    "test_samples": 202,
+    "unique_original_images": 154,
+    "split_seed": 42,
+    "test_accuracy": 0.955446,
+    "test_accuracy_percent": 95.54,
+    "macro_f1": 0.860644,
+    "test_loss_reproduced": 0.21742,
+    "correct_predictions": 193,
+    "incorrect_predictions": 9,
+    "input_size": 224,
+    "classes": [
+        "silk_spot",
+        "inclusion",
+        "waist_folding",
+        "rolled_pit",
+        "water_spot"
+    ],
+    "device_during_evaluation": "CPU",
+    "checkpoint_best_epoch": 15,
+    "checkpoint_best_val_macro_f1": 0.8297149914940226,
+    "local_cpu_speed_test": {
+        "timed_crops": 50,
+        "warmup_crops": 5,
+        "average_ms_per_crop": 58.02,
+        "median_ms_per_crop": 58.05,
+        "throughput_crops_per_second": 17.23
+    },
+    "notes": [
+        "Evaluation used original PIL aspect-preserving resize and grey padding.",
+        "The historical recorded test loss was 0.378935; the reproduced loss was 0.21742. These have not been reconciled.",
+        "Local CPU speed benchmark is a separate measurement from the 202-crop evaluation.",
+        "Grad-CAM provides visual evidence, not exact defect boundaries."
+    ]
+}

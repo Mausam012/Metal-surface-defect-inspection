@@ -2,7 +2,9 @@
 
 Run:  python app.py      then open http://127.0.0.1:5000
 """
+import json
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -13,6 +15,7 @@ from werkzeug.utils import secure_filename
 
 import config as cfg
 from backend import history, preprocessing, report_generator, validation, visualization
+from backend.base_model import ModelNotAvailable, make_result
 from backend.inference import predict
 from backend.model_manager import ModelManager
 
@@ -54,7 +57,50 @@ def create_app(test_config=None):
         gray = cv2.imread(str(d / "processed.png"), cv2.IMREAD_GRAYSCALE)
         if gray is None:
             raise RuntimeError("Processed image is missing. Run preprocessing again.")
-        result = predict(gray, model_name, manager)
+
+        if model_name.strip().lower() == "resnet":
+            rec = get_or_404(insp_id)
+            crop = (rec.get("preprocess_meta") or {}).get("resnet_crop")
+            if not isinstance(crop, dict):
+                raise ValueError("No ResNet crop is saved. Return to Upload and select a crop.")
+
+            x, y, w, h = (crop.get(k) for k in ("x", "y", "width", "height"))
+            if any(type(v) is not int for v in (x, y, w, h)) or x < 0 or y < 0 or w <= 0 or h <= 0:
+                raise ValueError("The saved ResNet crop coordinates are invalid.")
+
+            original_path = Path(app.config["UPLOAD_DIR"]) / rec["stored_filename"]
+            original = cv2.imread(str(original_path), cv2.IMREAD_COLOR)
+            if original is None:
+                raise RuntimeError("Original uploaded image could not be loaded.")
+            if x + w > original.shape[1] or y + h > original.shape[0]:
+                raise ValueError("The saved ResNet crop is outside the original image.")
+
+            bgr_crop = original[y:y + h, x:x + w]
+            if bgr_crop.size == 0:
+                raise ValueError("The selected ResNet crop is empty.")
+
+            resnet = manager.get("ResNet")
+            resnet.ensure_loaded()
+            started = time.perf_counter()
+            prediction = resnet.predict_crop(bgr_crop)
+            elapsed_ms = (time.perf_counter() - started) * 1000
+
+            result = make_result(
+                "ResNet",
+                model_version=resnet.version(),
+                status="Requires Manual Review",
+                defect_category=prediction["predicted_class"],
+                score=None,
+                confidence=float(prediction["confidence"]),
+                inference_time_ms=round(elapsed_ms, 2),
+                is_real_prediction=True,
+                class_probabilities=prediction["class_probabilities"],
+                crop_coordinates={"x": x, "y": y, "width": w, "height": h},
+                notes=["Classification applies only to the selected crop; this model does not localize defects."]
+            )
+        else:
+            result = predict(gray, model_name, manager)
+
         real = bool(result["is_real_prediction"])
         overlays = visualization.render_overlays(gray, result, d, simulated=not real)
         history.update_inspection(
@@ -163,6 +209,20 @@ def create_app(test_config=None):
             except ValueError as exc:
                 return api_error(str(exc))
 
+        crop = None
+        if model.lower() == "resnet":
+            try:
+                crop = json.loads(request.form.get("resnet_crop", ""))
+                if not isinstance(crop, dict) or set(crop) != {"x", "y", "width", "height"}:
+                    raise ValueError()
+                if any(type(crop[k]) is not int for k in crop):
+                    raise ValueError()
+                x, y, w, h = crop["x"], crop["y"], crop["width"], crop["height"]
+                if x < 0 or y < 0 or w <= 0 or h <= 0 or x + w > info["width"] or y + h > info["height"]:
+                    raise ValueError()
+            except (ValueError, TypeError, json.JSONDecodeError):
+                return api_error("Select a valid crop region before running ResNet.")
+
         stored = f"{uuid.uuid4().hex}.{info['extension']}"          # server-generated name
         path = Path(app.config["UPLOAD_DIR"]) / stored
         path.write_bytes(data)                                      # original is never modified afterwards
@@ -171,6 +231,8 @@ def create_app(test_config=None):
             file_size=len(data), image_format=info["format"], width=info["width"], height=info["height"])
         try:
             meta = preprocessing.preprocess_image(path, insp_dir(insp_id))
+            if crop is not None:
+                meta["resnet_crop"] = crop
             history.update_inspection(DB, insp_id, bit_depth=meta["bit_depth"], preprocess_settings=meta["settings"], preprocess_meta=meta)
             if model:
                 run_analysis(insp_id, model)
@@ -192,6 +254,9 @@ def create_app(test_config=None):
                                                   insp_dir(insp_id), request.get_json(silent=True) or {})
         except Exception:
             return api_error("Preprocessing failed for this image.", 422)
+        previous_meta = rec.get("preprocess_meta") or {}
+        if previous_meta.get("resnet_crop"):
+            meta["resnet_crop"] = previous_meta["resnet_crop"]
         history.update_inspection(DB, insp_id, bit_depth=meta["bit_depth"], preprocess_settings=meta["settings"],
                                   preprocess_meta=meta, status="Uploaded", mode=None, overlays=None, result_json=None,
                                   model_used=None, is_real_prediction=0, score=None, confidence=None,

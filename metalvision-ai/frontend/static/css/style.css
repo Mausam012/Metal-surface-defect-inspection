@@ -139,3 +139,28 @@ dl.mv-kv dt { color: var(--muted); } dl.mv-kv dd { margin: 0; word-break: break-
 .layers { display: grid; gap: .5rem; }
 .layers div { border: 1px solid var(--line); border-radius: 8px; padding: .55rem .8rem; background: #fff; }
 .layers div b { color: var(--navy-900); } .layers .ml { border-color: var(--cyan); background: var(--cyan-soft); }
+/* ---------- ResNet crop selection ---------- */
+.crop-canvas-wrap {
+  width: 100%;
+  min-height: 100px;
+  padding: 8px;
+  background: var(--lightbox);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: auto;
+}
+
+#cropCanvas {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 70vh;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+  border-radius: 4px;
+}
